@@ -1,0 +1,32 @@
+name: Fix portal SSR location
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-portal-location.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix browser-only redirect during SSR
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/portal/page.tsx')
+          s=p.read_text()
+          old="if(!session){location.replace('/');return"
+          new="if(!session){if(typeof window!=='undefined')window.location.replace('/');return"
+          if old not in s:
+              raise SystemExit('target redirect not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name 'hss-portal-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app/portal/page.tsx
+          git commit -m 'Fix portal SSR browser redirect'
+          git push
