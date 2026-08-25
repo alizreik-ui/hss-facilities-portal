@@ -1,4 +1,4 @@
-name: Remove blocking connecting screen
+name: Split lightweight login from heavy portal
 on:
   push:
     paths:
@@ -10,23 +10,52 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Remove startup blocker
+      - name: Split portal
         run: |
+          mkdir -p app/portal
+          cp app/page.tsx app/portal/page.tsx
+          cat > app/page.tsx <<'EOF'
+          'use client';
+          import {useEffect,useState} from 'react';
+          import {createClient} from '@supabase/supabase-js';
+          const supabase=createClient('https://sdbdppcbvlalyjnxeqmy.supabase.co','sb_publishable_YRnoxe5WTODYiA67nLfpNg_JqYHdaYM');
+          export default function Login(){
+            const [lang,setLang]=useState<'en'|'ar'>('en');
+            const [user,setUser]=useState('');
+            const [pass,setPass]=useState('');
+            const [busy,setBusy]=useState(false);
+            const [err,setErr]=useState('');
+            const t=(en:string,ar:string)=>lang==='ar'?ar:en;
+            useEffect(()=>{document.documentElement.lang=lang;document.documentElement.dir=lang==='ar'?'rtl':'ltr';try{const raw=localStorage.getItem('sb-sdbdppcbvlalyjnxeqmy-auth-token');const cached=raw?JSON.parse(raw):null;if(cached?.access_token&&cached?.user)location.replace('/portal')}catch{}},[lang]);
+            async function signIn(e:any){e.preventDefault();if(busy)return;setBusy(true);setErr('');const id=user.trim();const email=id.includes('@')?id:`${id.toLowerCase()}@hss.local`;const {error}=await supabase.auth.signInWithPassword({email,password:pass});if(error){setErr(t('Invalid username or password','اسم المستخدم أو كلمة المرور غير صحيحة'));setBusy(false);return}location.replace('/portal')}
+            return <main className='login'>
+              <div className='lang'><button type='button' onClick={()=>setLang('en')}>English</button><button type='button' onClick={()=>setLang('ar')}>العربية</button></div>
+              <section className='card'>
+                <div className='brand'>HSS</div>
+                <h1>{t('HSS & Facilities Digital Portal','البوابة الرقمية للمرافق والصحة والسلامة والأمن')}</h1>
+                <p>{t('Secure access to operational services, reporting and analytics','دخول آمن للخدمات التشغيلية والتقارير والتحليلات')}</p>
+                <form onSubmit={signIn}>
+                  <input autoFocus name='username' placeholder={t('Username','اسم المستخدم')} value={user} onChange={e=>setUser(e.target.value)} autoComplete='username'/>
+                  <input name='password' type='password' placeholder={t('Password','كلمة المرور')} value={pass} onChange={e=>setPass(e.target.value)} autoComplete='current-password'/>
+                  <button className='primary' type='submit' disabled={busy}>{busy?t('Signing in...','جارٍ تسجيل الدخول...'):t('Sign in','تسجيل الدخول')}</button>
+                </form>
+                {err&&<p className='error'>{err}</p>}
+              </section>
+            </main>
+          }
+          EOF
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('app/page.tsx')
-          text=p.read_text()
-          old="[page,setPage]=useState('dashboard'),[lang,setLang]=useState<'en'|'ar'>('en'),[loading,setLoading]=useState(true);"
-          new="[page,setPage]=useState('dashboard'),[lang,setLang]=useState<'en'|'ar'>('en'),[loading,setLoading]=useState(false);"
-          if old not in text:
-              raise SystemExit('loading initializer not found')
-          text=text.replace(old,new,1)
-          p.write_text(text)
+          p=Path('app/portal/page.tsx')
+          s=p.read_text()
+          s=s.replace("if(!session)return <main className='login'", "if(!session){location.replace('/');return <main className='login'")
+          s=s.replace("</section></main>;\n if(profile?.must_change_password)", "</section></main>}\n if(profile?.must_change_password)")
+          p.write_text(s)
           PY
       - name: Commit
         run: |
           git config user.name hss-portal-bot
           git config user.email actions@users.noreply.github.com
-          git add app/page.tsx
-          git commit -m 'Remove blocking connecting screen'
+          git add app/page.tsx app/portal/page.tsx
+          git commit -m 'Split lightweight login from heavy portal'
           git push
