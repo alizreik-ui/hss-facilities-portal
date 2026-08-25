@@ -1,5 +1,7 @@
 import {NextResponse} from 'next/server';
 
+export const preferredRegion='bom1';
+
 const SUPABASE_URL='https://sdbdppcbvlalyjnxeqmy.supabase.co';
 const SUPABASE_KEY='sb_publishable_YRnoxe5WTODYiA67nLfpNg_JqYHdaYM';
 
