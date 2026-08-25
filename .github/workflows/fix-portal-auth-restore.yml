@@ -1,0 +1,33 @@
+name: Fix portal auth restore
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-portal-auth-restore.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for Supabase session before redirect
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/portal/page.tsx')
+          s=p.read_text()
+          old="[page,setPage]=useState('dashboard'),[lang,setLang]=useState<'en'|'ar'>('en'),[loading,setLoading]=useState(false);"
+          new="[page,setPage]=useState('dashboard'),[lang,setLang]=useState<'en'|'ar'>('en'),[loading,setLoading]=useState(true);"
+          if old not in s:
+              raise SystemExit('Target loading state not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name 'hss-portal-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app/portal/page.tsx
+          git commit -m 'Wait for Supabase auth restoration before portal redirect'
+          git push
