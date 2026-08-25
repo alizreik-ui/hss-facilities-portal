@@ -5,10 +5,18 @@ const SUPABASE_URL='https://sdbdppcbvlalyjnxeqmy.supabase.co';
 const SUPABASE_KEY='sb_publishable_YRnoxe5WTODYiA67nLfpNg_JqYHdaYM';
 const BASE='https://raw.githubusercontent.com/alizreik-ui/hss-facilities-portal/main/data';
 
-async function load(name:string){
-  const r=await fetch(`${BASE}/${name}`,{cache:'no-store'});
-  if(!r.ok) throw new Error(`Unable to load ${name}: ${r.status}`);
-  const b64=(await r.text()).trim();
+async function text(path:string){
+  const r=await fetch(`${BASE}/${path}`,{cache:'no-store'});
+  if(!r.ok) throw new Error(`Unable to load ${path}: ${r.status}`);
+  return (await r.text()).trim();
+}
+async function loadSingle(name:string){
+  const b64=await text(name);
+  return JSON.parse(gunzipSync(Buffer.from(b64,'base64')).toString('utf8'));
+}
+async function loadPhysicalSecurity(){
+  const parts=await Promise.all([0,1,2,3,4,5].map(i=>text(`ps_parts/${i}.txt`)));
+  const b64=parts.join('');
   return JSON.parse(gunzipSync(Buffer.from(b64,'base64')).toString('utf8'));
 }
 
@@ -18,8 +26,8 @@ export async function GET(req:Request){
     const token=url.searchParams.get('token');
     if(!token) return NextResponse.json({error:'Import token required'},{status:401});
     const [ps,ag]=await Promise.all([
-      load('physical_security_2026.json.gz.b64'),
-      load('agriculture_feb2025.json.gz.b64')
+      loadPhysicalSecurity(),
+      loadSingle('agriculture_feb2025.json.gz.b64')
     ]);
     const r=await fetch(`${SUPABASE_URL}/rest/v1/rpc/import_hss_historical_data`,{
       method:'POST',
