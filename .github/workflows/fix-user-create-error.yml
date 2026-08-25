@@ -1,0 +1,34 @@
+name: Fix user creation validation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-user-create-error.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch user creation validation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/portal/page.tsx')
+          s=p.read_text()
+          old="async function createUser(e:any){e.preventDefault();setAdminMsg('');const {data,error}=await supabase.functions.invoke('admin-users',{body:{action:'create',...userForm}});if(error||data?.error){setAdminMsg(data?.error||error?.message||'Error');return}setAdminMsg(t('User created successfully','تم إنشاء المستخدم بنجاح'));setUserForm({username:'',full_name:'',password:'',role:'staff',department:'HSS',module_permissions:{...defaultPerms}});await loadUsers()}"
+          new="async function createUser(e:any){e.preventDefault();setAdminMsg('');if(!userForm.username?.trim()){setAdminMsg(t('Username is required','اسم المستخدم مطلوب'));return}if(!userForm.password||userForm.password.length<10){setAdminMsg(t('Temporary password must be at least 10 characters','يجب ألا تقل كلمة المرور المؤقتة عن ١٠ أحرف'));return}const {data,error}=await supabase.functions.invoke('admin-users',{body:{action:'create',...userForm}});if(error||data?.error){let msg=data?.error||error?.message||'Error';if(String(msg).includes('non-2xx'))msg=t('User could not be created. Check that the username is unique and the temporary password is at least 10 characters.','تعذر إنشاء المستخدم. تأكد من أن اسم المستخدم غير مستخدم وأن كلمة المرور المؤقتة لا تقل عن ١٠ أحرف.');setAdminMsg(msg);return}setAdminMsg(t('User created successfully','تم إنشاء المستخدم بنجاح'));setUserForm({username:'',full_name:'',password:'',role:'staff',department:'HSS',module_permissions:{...defaultPerms}});await loadUsers()}"
+          if old not in s:
+              raise SystemExit('target createUser function not found')
+          s=s.replace(old,new)
+          s=s.replace("placeholder={t('Temporary Password','كلمة المرور المؤقتة')}","placeholder={t('Temporary Password (minimum 10 characters)','كلمة المرور المؤقتة (١٠ أحرف على الأقل)')}")
+          p.write_text(s)
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name 'hss-portal-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app/portal/page.tsx
+          git commit -m 'Improve user creation validation and error message' || exit 0
+          git push
