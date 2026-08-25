@@ -1,5 +1,4 @@
 import './globals.css';
-import PortalTools from '../components/PortalTools';
 
 export const metadata = {
   title: 'HSS & Facilities Portal',
@@ -7,5 +6,5 @@ export const metadata = {
 };
 
 export default function RootLayout({children}:{children:React.ReactNode}){
-  return <html lang="en"><body><PortalTools/>{children}</body></html>;
+  return <html lang="en"><body>{children}</body></html>;
 }
