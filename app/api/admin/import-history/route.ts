@@ -15,8 +15,8 @@ async function loadSingle(name:string){
   return JSON.parse(gunzipSync(Buffer.from(b64,'base64')).toString('utf8'));
 }
 async function loadPhysicalSecurity(){
-  const parts=await Promise.all([0,1,2,3,4,5].map(i=>text(`ps_parts/${i}.txt`)));
-  const b64=parts.join('');
+  const parts=await Promise.all([0,1,2,3,4,5,6].map(i=>text(`ps_parts/${i}.txt`)));
+  const b64=parts.map((p,i)=>i<6?p.slice(0,5000):p).join('');
   return JSON.parse(gunzipSync(Buffer.from(b64,'base64')).toString('utf8'));
 }
 
@@ -25,20 +25,13 @@ export async function GET(req:Request){
     const url=new URL(req.url);
     const token=url.searchParams.get('token');
     if(!token) return NextResponse.json({error:'Import token required'},{status:401});
-    const [ps,ag]=await Promise.all([
-      loadPhysicalSecurity(),
-      loadSingle('agriculture_feb2025.json.gz.b64')
-    ]);
+    const [ps,ag]=await Promise.all([loadPhysicalSecurity(),loadSingle('agriculture_feb2025.json.gz.b64')]);
     const r=await fetch(`${SUPABASE_URL}/rest/v1/rpc/import_hss_historical_data`,{
-      method:'POST',
-      headers:{apikey:SUPABASE_KEY,'Content-Type':'application/json'},
-      body:JSON.stringify({p_secret:token,p_ps:ps,p_ag:ag}),
-      cache:'no-store'
+      method:'POST',headers:{apikey:SUPABASE_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({p_secret:token,p_ps:ps,p_ag:ag}),cache:'no-store'
     });
     const body=await r.text();
     if(!r.ok) return NextResponse.json({error:'Supabase import failed',details:body},{status:500});
     return NextResponse.json({ok:true,result:JSON.parse(body),source:{physical_security:ps.length,agriculture:ag.length}});
-  }catch(e:any){
-    return NextResponse.json({error:e?.message||'Import failed'},{status:500});
-  }
+  }catch(e:any){return NextResponse.json({error:e?.message||'Import failed'},{status:500})}
 }
