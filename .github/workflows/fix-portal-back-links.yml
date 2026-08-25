@@ -1,0 +1,46 @@
+name: Fix portal back links
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-portal-back-links.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update module portal links
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          targets = [
+              Path('app/ai/page.tsx'),
+              Path('app/command-center/page.tsx'),
+              Path('app/contracts/page.tsx'),
+              Path('app/field-operations/page.tsx'),
+              Path('app/operations/page.tsx'),
+              Path('app/analytics/page.tsx'),
+              Path('app/system/page.tsx'),
+          ]
+          for p in targets:
+              if not p.exists():
+                  continue
+              s = p.read_text()
+              s2 = s.replace("href='/'", "href='/portal'").replace('href="/"', 'href="/portal"')
+              if s2 != s:
+                  p.write_text(s2)
+                  print('updated', p)
+          PY
+      - name: Commit changes
+        run: |
+          git config user.name 'hss-portal-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app
+          if git diff --cached --quiet; then
+            echo 'No changes needed'
+          else
+            git commit -m 'Keep authenticated navigation inside portal'
+            git push
+          fi
