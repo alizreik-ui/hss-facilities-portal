@@ -1,4 +1,4 @@
-name: Fast auth startup patch
+name: Remove blocking connecting screen
 on:
   push:
     paths:
@@ -10,21 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Update startup flow
+      - name: Remove startup blocker
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p=Path('app/page.tsx')
           text=p.read_text()
-          old=" useEffect(()=>{let alive=true;const timeout=setTimeout(()=>{if(alive)setLoading(false)},2500);supabase.auth.getSession().then(async({data})=>{if(!alive)return;setSession(data.session);if(data.session)await loadProfile(data.session.user.id);clearTimeout(timeout);if(alive)setLoading(false)}).catch(()=>{clearTimeout(timeout);if(alive)setLoading(false)});const {data:{subscription}}=supabase.auth.onAuthStateChange(async(e,s)=>{setSession(s);if(e==='SIGNED_IN'&&s){setLoading(true);await loadProfile(s.user.id);setLoading(false)}if(e==='SIGNED_OUT'){setProfile(null);setSummary({})}});return()=>{alive=false;clearTimeout(timeout);subscription.unsubscribe()}},[]);"
-          new=" useEffect(()=>{let alive=true;try{const raw=window.localStorage.getItem('sb-sdbdppcbvlalyjnxeqmy-auth-token');const cached=raw?JSON.parse(raw):null;if(cached?.access_token&&cached?.user){setSession(cached);setLoading(false);loadProfile(cached.user.id)}else setLoading(false)}catch{setLoading(false)}supabase.auth.getSession().then(({data})=>{if(!alive)return;setSession(data.session);if(data.session)loadProfile(data.session.user.id);else{setProfile(null);setSummary({})}}).catch(()=>{});const {data:{subscription}}=supabase.auth.onAuthStateChange((e,s)=>{if(!alive)return;setSession(s);setLoading(false);if(e==='SIGNED_IN'&&s)loadProfile(s.user.id);if(e==='SIGNED_OUT'){setProfile(null);setSummary({})}});return()=>{alive=false;subscription.unsubscribe()}},[]);"
-          if old not in text: raise SystemExit('auth block not found')
-          p.write_text(text.replace(old,new,1))
+          old="[page,setPage]=useState('dashboard'),[lang,setLang]=useState<'en'|'ar'>('en'),[loading,setLoading]=useState(true);"
+          new="[page,setPage]=useState('dashboard'),[lang,setLang]=useState<'en'|'ar'>('en'),[loading,setLoading]=useState(false);"
+          if old not in text:
+              raise SystemExit('loading initializer not found')
+          text=text.replace(old,new,1)
+          p.write_text(text)
           PY
       - name: Commit
         run: |
           git config user.name hss-portal-bot
           git config user.email actions@users.noreply.github.com
           git add app/page.tsx
-          git commit -m 'Make auth startup non-blocking'
+          git commit -m 'Remove blocking connecting screen'
           git push
