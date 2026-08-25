@@ -39,7 +39,7 @@ export default function Analytics(){
 
  useEffect(()=>{(async()=>{
   const {data:{session}}=await supabase.auth.getSession();
-  if(!session){window.location.href='/';return}
+  if(!session){window.location.href='/portal';return}
   const {data:p}=await supabase.from('profiles').select('*').eq('id',session.user.id).single(); setProfile(p);
   const [a,b,c,d,e]=await Promise.all([
    supabase.from('incidents').select('id,severity,status,category,incident_date'),
@@ -88,7 +88,7 @@ export default function Analytics(){
  return <main className='analytics-page'>
   <div className='analytics-hero'>
    <div><div className='analytics-eyebrow'>HSS DIGITAL OPERATIONS</div><h1>{t('Management Analytics Dashboard','لوحة التحليلات الإدارية')}</h1><p>{t('Live operational overview from Supabase','نظرة تشغيلية مباشرة من قاعدة بيانات Supabase')}</p></div>
-   <div className='analytics-actions'><a href='/'>{t('Back to portal','العودة للبوابة')}</a><button onClick={()=>setLang(lang==='en'?'ar':'en')}>{lang==='en'?'العربية':'English'}</button></div>
+   <div className='analytics-actions'><a href='/portal'>{t('Back to portal','العودة للبوابة')}</a><button onClick={()=>setLang(lang==='en'?'ar':'en')}>{lang==='en'?'العربية':'English'}</button></div>
   </div>
 
   <section className='analytics-kpis'>

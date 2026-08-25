@@ -8,9 +8,9 @@ export default function SystemPage(){
  const [rows,setRows]=useState<any[]>([]),[summary,setSummary]=useState<any>({}),[loading,setLoading]=useState(true),[err,setErr]=useState('');
  useEffect(()=>{(async()=>{
   const {data:{session}}=await supabase.auth.getSession();
-  if(!session){location.href='/';return}
+  if(!session){location.href='/portal';return}
   const {data:profile}=await supabase.from('profiles').select('role').eq('id',session.user.id).single();
-  if(profile?.role!=='admin'){location.href='/';return}
+  if(profile?.role!=='admin'){location.href='/portal';return}
   const [{data:audit,error:aErr},{data:sum,error:sErr}]=await Promise.all([
     supabase.from('audit_log').select('id,action,entity,entity_id,created_at').order('created_at',{ascending:false}).limit(100),
     supabase.rpc('hss_dashboard_summary')

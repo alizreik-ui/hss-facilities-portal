@@ -24,9 +24,9 @@ export default function AIPage(){
   }finally{setSending(false)}
  }
  if(loading)return <main className='login'><section className='card'>Loading...</section></main>;
- if(!session)return <main className='login'><section className='card'><h1>{t('Login required','يلزم تسجيل الدخول')}</h1><a className='btn' href='/'>{t('Back to portal','العودة إلى البوابة')}</a></section></main>;
+ if(!session)return <main className='login'><section className='card'><h1>{t('Login required','يلزم تسجيل الدخول')}</h1><a className='btn' href='/portal'>{t('Back to portal','العودة إلى البوابة')}</a></section></main>;
  return <main className='content'>
-  <div className='actions' style={{alignItems:'center',marginBottom:12}}><a className='btn' href='/'>{t('Back to Portal','العودة إلى البوابة')}</a><h1 style={{flex:1}}>{t('Ask HSS AI','اسأل مساعد HSS الذكي')}</h1><div className='lang'><button onClick={()=>setLang('en')}>EN</button><button onClick={()=>setLang('ar')}>العربية</button></div></div>
+  <div className='actions' style={{alignItems:'center',marginBottom:12}}><a className='btn' href='/portal'>{t('Back to Portal','العودة إلى البوابة')}</a><h1 style={{flex:1}}>{t('Ask HSS AI','اسأل مساعد HSS الذكي')}</h1><div className='lang'><button onClick={()=>setLang('en')}>EN</button><button onClick={()=>setLang('ar')}>العربية</button></div></div>
   <section className='card'>
    <p className='muted'>{t('Ask about incidents, overdue work orders, PPM, physical security, or agriculture data you are authorized to access.','اسأل عن الحوادث أو أوامر العمل المتأخرة أو الصيانة الوقائية أو الأمن المادي أو بيانات الزراعة المصرح لك بالوصول إليها.')}</p>
    <div style={{minHeight:360,maxHeight:520,overflowY:'auto',background:'#f8f9fa',padding:12,borderRadius:10,marginBottom:12}}>
