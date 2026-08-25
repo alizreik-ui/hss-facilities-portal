@@ -1,0 +1,33 @@
+name: Fix assignment user dropdowns
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-assign-users.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch assignment user loading
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/portal/page.tsx')
+          s=p.read_text()
+          s=s.replace("setProfile(data.profile);setSummary(data.summary||{});loadEssential();return", "setProfile(data.profile);setSummary(data.summary||{});loadEssential();loadUsers();return")
+          s=s.replace("setProfile(p);supabase.rpc('hss_dashboard_summary').then(({data:sum})=>setSummary(sum||{}));loadEssential()", "setProfile(p);supabase.rpc('hss_dashboard_summary').then(({data:sum})=>setSummary(sum||{}));loadEssential();loadUsers()")
+          s=s.replace("async function openIncident(i:any){setSelected(i);", "async function openIncident(i:any){if(!users.length)await loadUsers();setSelected(i);")
+          s=s.replace("function go(p:string){setPage(p);if(p==='admin'&&!users.length)loadUsers();if(p==='physical'&&!ps.length)loadPs();if(p==='agriculture'&&!ag.length)loadAg();if(p==='workorders'&&!wo.length)loadWo();if(p==='ppm'&&!ppm.length)loadPpm()}", "function go(p:string){setPage(p);if(['admin','workorders','ppm'].includes(p)&&!users.length)loadUsers();if(p==='physical'&&!ps.length)loadPs();if(p==='agriculture'&&!ag.length)loadAg();if(p==='workorders'&&!wo.length)loadWo();if(p==='ppm'&&!ppm.length)loadPpm()}")
+          s=s.replace("label:u.full_name}))", "label:u.full_name||u.username}))")
+          p.write_text(s)
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name 'hss-portal-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app/portal/page.tsx
+          git commit -m 'Load active users across assignment workflows' || exit 0
+          git push
