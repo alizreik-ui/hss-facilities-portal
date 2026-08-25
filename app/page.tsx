@@ -9,8 +9,8 @@ export default function Login(){
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState('');
   const t=(en:string,ar:string)=>lang==='ar'?ar:en;
-  useEffect(()=>{document.documentElement.lang=lang;document.documentElement.dir=lang==='ar'?'rtl':'ltr';try{const raw=localStorage.getItem('sb-sdbdppcbvlalyjnxeqmy-auth-token');const cached=raw?JSON.parse(raw):null;if(cached?.access_token&&cached?.user)location.replace('/portal')}catch{}},[lang]);
-  async function signIn(e:any){e.preventDefault();if(busy)return;setBusy(true);setErr('');const id=user.trim();const email=id.includes('@')?id:`${id.toLowerCase()}@hss.local`;const {error}=await supabase.auth.signInWithPassword({email,password:pass});if(error){setErr(t('Invalid username or password','اسم المستخدم أو كلمة المرور غير صحيحة'));setBusy(false);return}location.replace('/portal')}
+  useEffect(()=>{document.documentElement.lang=lang;document.documentElement.dir=lang==='ar'?'rtl':'ltr';},[lang]);
+  async function signIn(e:any){e.preventDefault();if(busy)return;setBusy(true);setErr('');const id=user.trim();const email=id.includes('@')?id:`${id.toLowerCase()}@hss.local`;const {data,error}=await supabase.auth.signInWithPassword({email,password:pass});if(error||!data.session){setErr(t('Invalid username or password','اسم المستخدم أو كلمة المرور غير صحيحة'));setBusy(false);return;}window.location.assign('/portal');}
   return <main className='login'>
     <div className='lang'><button type='button' onClick={()=>setLang('en')}>English</button><button type='button' onClick={()=>setLang('ar')}>العربية</button></div>
     <section className='card'>
