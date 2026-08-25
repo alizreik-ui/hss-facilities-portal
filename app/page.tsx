@@ -8,7 +8,7 @@ const defaultPerms={dashboard:true,physical_security:false,agriculture:false,hea
 const moduleOptions=[['physical_security','Physical Security','الأمن المادي'],['agriculture','Agriculture & Landscaping','الزراعة وتنسيق الحدائق'],['health_safety','Health & Safety','الصحة والسلامة'],['facilities','Facilities Management','إدارة المرافق'],['ai','Ask HSS AI','اسأل مساعد HSS الذكي']];
 
 export default function Page(){
- const [session,setSession]=useState<any>(null),[profile,setProfile]=useState<any>(null),[page,setPage]=useState('dashboard'),[lang,setLang]=useState<'en'|'ar'>('en'),[loading,setLoading]=useState(true);
+ const [session,setSession]=useState<any>(null),[profile,setProfile]=useState<any>(null),[page,setPage]=useState('dashboard'),[lang,setLang]=useState<'en'|'ar'>('en'),[loading,setLoading]=useState(false);
  const [loginId,setLoginId]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState('');
  const [newPassword,setNewPassword]=useState(''),[confirmPassword,setConfirmPassword]=useState('');
  const [users,setUsers]=useState<any[]>([]),[incidents,setIncidents]=useState<any[]>([]),[selected,setSelected]=useState<any>(null),[actions,setActions]=useState<any[]>([]);
