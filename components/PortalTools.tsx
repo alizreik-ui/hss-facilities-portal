@@ -35,6 +35,7 @@ export default function PortalTools(){
  return <nav style={navStyle} aria-label='Portal navigation'>
   <a style={linkStyle} href='/command-center'>Command Center / مركز القيادة</a>
   <a style={linkStyle} href='/operations'>Operations / العمليات</a>
+  <a style={linkStyle} href='/field-operations'>Field Ops / العمليات الميدانية</a>
   <a style={linkStyle} href='/contracts'>Contracts / العقود</a>
   <a style={linkStyle} href='/analytics'>Analytics / التحليلات</a>
   <a style={linkStyle} href='/ai'>Ask HSS AI / اسأل HSS</a>
