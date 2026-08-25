@@ -1,11 +1,11 @@
 'use client';
-import {useEffect,useState} from 'react';
+import {useEffect,useMemo,useState} from 'react';
 import {createClient} from '@supabase/supabase-js';
 
 const supabase=createClient('https://sdbdppcbvlalyjnxeqmy.supabase.co','sb_publishable_YRnoxe5WTODYiA67nLfpNg_JqYHdaYM');
 
 const defaultPerms={dashboard:true,physical_security:false,agriculture:false,health_safety:true,facilities:false,ai:true};
-const modules=[
+const moduleOptions=[
  ['physical_security','Physical Security','الأمن المادي'],
  ['agriculture','Agriculture & Landscaping','الزراعة وتنسيق الحدائق'],
  ['health_safety','Health & Safety','الصحة والسلامة'],
@@ -17,227 +17,133 @@ export default function Page(){
  const [session,setSession]=useState<any>(null),[profile,setProfile]=useState<any>(null),[page,setPage]=useState('dashboard'),[lang,setLang]=useState<'en'|'ar'>('en'),[loading,setLoading]=useState(true);
  const [loginId,setLoginId]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState('');
  const [newPassword,setNewPassword]=useState(''),[confirmPassword,setConfirmPassword]=useState('');
- const [incidents,setIncidents]=useState<any[]>([]),[selected,setSelected]=useState<any>(null),[actions,setActions]=useState<any[]>([]),[users,setUsers]=useState<any[]>([]);
+ const [users,setUsers]=useState<any[]>([]),[incidents,setIncidents]=useState<any[]>([]),[selected,setSelected]=useState<any>(null),[actions,setActions]=useState<any[]>([]);
+ const [ps,setPs]=useState<any[]>([]),[ag,setAg]=useState<any[]>([]),[wo,setWo]=useState<any[]>([]),[ppm,setPpm]=useState<any[]>([]),[notifications,setNotifications]=useState<any[]>([]);
  const [form,setForm]=useState<any>({category:'Health & Safety',incident_type:'',department:'',building:'',location:'',description:'',severity:'medium',persons_involved:'',injury:false,immediate_action:''});
  const [investigation,setInvestigation]=useState(''),[rootCause,setRootCause]=useState(''),[investigator,setInvestigator]=useState('');
  const [ca,setCa]=useState(''),[caUser,setCaUser]=useState(''),[caDue,setCaDue]=useState('');
- const [userForm,setUserForm]=useState<any>({username:'',full_name:'',password:'',role:'staff',department:'HSS',module_permissions:{...defaultPerms}});
- const [adminMsg,setAdminMsg]=useState('');
+ const [userForm,setUserForm]=useState<any>({username:'',full_name:'',password:'',role:'staff',department:'HSS',module_permissions:{...defaultPerms}}),[adminMsg,setAdminMsg]=useState('');
+ const [psForm,setPsForm]=useState<any>({type:'Task',system:'',sub_system:'',description:'',location:'',area:'',criticality:'Medium',start_date:'',status:'Open',remarks:''});
+ const [agForm,setAgForm]=useState<any>({area_type:'indoor',location:'',landscape_category:'Indoor Plants',activity:'Watering',plant_units:'',status:'planned',check_date:'',remarks:'',contractor:''});
+ const [woForm,setWoForm]=useState<any>({type:'PPM',module:'physical_security',system:'',asset_id:'',location:'',description:'',priority:'medium',assigned_to:'',due_date:''});
+ const [ppmForm,setPpmForm]=useState<any>({module:'physical_security',system:'',sub_system:'',asset_id:'',location:'',description:'',frequency:'monthly',interval_value:1,start_date:'',priority:'medium',sla_hours:24,assigned_to:''});
+
  const t=(en:string,ar:string)=>lang==='ar'?ar:en;
- const manager=['admin','management','supervisor'].includes(profile?.role);
  const isAdmin=profile?.role==='admin';
+ const manager=['admin','management','supervisor'].includes(profile?.role);
+ const unrestricted=['admin','management'].includes(profile?.role);
+ const can=(key:string)=>!!profile&&(unrestricted||profile.role==='supervisor'||profile.module_permissions?.[key]);
+ const num=(v:any)=>new Intl.NumberFormat(lang==='ar'?'ar-EG':'en-US').format(Number(v||0));
+ const date=(v:any)=>v?new Intl.DateTimeFormat(lang==='ar'?'ar-QA':'en-GB').format(new Date(v)):'-';
+ const statusLabel=(s:string)=>{
+   const m:any={open:['Open','مفتوح'],assigned:['Assigned','مسند'],in_progress:['In Progress','قيد التنفيذ'],pending_verification:['Pending Verification','بانتظار التحقق'],completed:['Completed','مكتمل'],rejected:['Rejected','مرفوض'],cancelled:['Cancelled','ملغي'],reported:['Reported','تم الإبلاغ'],under_investigation:['Under Investigation','قيد التحقيق'],pending_corrective_actions:['Corrective Actions','إجراءات تصحيحية'],closed:['Closed','مغلق'],planned:['Planned','مخطط']};
+   return m[s]?t(m[s][0],m[s][1]):s;
+ };
  const roleName=(r:string)=>({admin:t('Admin','مدير النظام'),management:t('Management','الإدارة'),supervisor:t('Supervisor','مشرف'),staff:t('Staff','موظف'),contractor:t('Contractor','مقاول'),viewer:t('Viewer','مشاهدة فقط')} as any)[r]||r;
 
  useEffect(()=>{
    supabase.auth.getSession().then(async({data})=>{setSession(data.session);if(data.session)await loadProfile(data.session.user.id);setLoading(false)});
    const {data:{subscription}}=supabase.auth.onAuthStateChange(async(_e,s)=>{setSession(s);if(s)await loadProfile(s.user.id);else setProfile(null)});
-   return()=>subscription.unsubscribe()
+   return()=>subscription.unsubscribe();
  },[]);
  useEffect(()=>{document.documentElement.dir=lang==='ar'?'rtl':'ltr';document.documentElement.lang=lang},[lang]);
 
  async function loadProfile(id:string){
    const {data}=await supabase.from('profiles').select('*').eq('id',id).single();
    setProfile(data);
-   await Promise.all([loadIncidents(),loadUsers()]);
+   await loadAll();
  }
- async function loadIncidents(){const {data}=await supabase.from('incidents').select('*').order('incident_date',{ascending:false});setIncidents(data||[])}
+ async function loadAll(){await Promise.all([loadUsers(),loadIncidents(),loadPs(),loadAg(),loadWo(),loadPpm(),loadNotifications()])}
  async function loadUsers(){const {data}=await supabase.from('profiles').select('*').order('full_name');setUsers(data||[])}
- async function login(){
-   setError('');
-   const id=loginId.trim();
-   const email=id.includes('@')?id:`${id.toLowerCase()}@hss.local`;
-   const {error}=await supabase.auth.signInWithPassword({email,password});
-   if(error)setError(t('Invalid username or password','اسم المستخدم أو كلمة المرور غير صحيحة'));
- }
+ async function loadIncidents(){const {data}=await supabase.from('incidents').select('*').order('incident_date',{ascending:false});setIncidents(data||[])}
+ async function loadPs(){const {data}=await supabase.from('physical_security_records').select('*').order('start_date',{ascending:false}).limit(300);setPs(data||[])}
+ async function loadAg(){const {data}=await supabase.from('agriculture_checklists').select('*').order('check_date',{ascending:false}).limit(300);setAg(data||[])}
+ async function loadWo(){const {data}=await supabase.from('work_orders').select('*').order('created_at',{ascending:false}).limit(300);setWo(data||[])}
+ async function loadPpm(){const {data}=await supabase.from('ppm_schedules').select('*').order('next_due_date',{ascending:true}).limit(300);setPpm(data||[])}
+ async function loadNotifications(){if(!session?.user?.id)return;const {data}=await supabase.from('notifications').select('*').order('created_at',{ascending:false}).limit(100);setNotifications(data||[])}
+
+ async function login(){setError('');const id=loginId.trim();const email=id.includes('@')?id:`${id.toLowerCase()}@hss.local`;const {error}=await supabase.auth.signInWithPassword({email,password});if(error)setError(t('Invalid username or password','اسم المستخدم أو كلمة المرور غير صحيحة'))}
  async function logout(){await supabase.auth.signOut();setSession(null);setProfile(null);setPage('dashboard')}
- async function changePassword(e:any){
-   e.preventDefault();setError('');
-   if(newPassword.length<10){setError(t('Password must be at least 10 characters','يجب ألا تقل كلمة المرور عن ١٠ أحرف'));return}
-   if(newPassword!==confirmPassword){setError(t('Passwords do not match','كلمتا المرور غير متطابقتين'));return}
-   const {error:uErr}=await supabase.auth.updateUser({password:newPassword});
-   if(uErr){setError(uErr.message);return}
-   const {error:fErr}=await supabase.functions.invoke('admin-users',{body:{action:'complete_password_change'}});
-   if(fErr){setError(fErr.message);return}
-   setNewPassword('');setConfirmPassword('');await loadProfile(session.user.id);
- }
- async function submitIncident(e:any){
-   e.preventDefault();if(!session)return;
-   const {error}=await supabase.from('incidents').insert({...form,status:'reported',approval_status:'pending',reported_by:session.user.id});
-   if(error){alert(error.message);return}
-   setForm({category:'Health & Safety',incident_type:'',department:'',building:'',location:'',description:'',severity:'medium',persons_involved:'',injury:false,immediate_action:''});
-   await loadIncidents();setPage('incidents')
- }
- async function openIncident(i:any){
-   setSelected(i);setInvestigation(i.investigation_summary||'');setRootCause(i.root_cause||'');setInvestigator(i.investigator_id||'');
-   const {data}=await supabase.from('incident_corrective_actions').select('*').eq('incident_id',i.id).order('created_at');
-   setActions(data||[]);setPage('detail')
- }
- async function saveInvestigation(status?:string){
-   if(!selected)return;
-   const update:any={investigation_summary:investigation,root_cause:rootCause,investigator_id:investigator||null,updated_at:new Date().toISOString()};
-   if(status)update.status=status;if(status==='closed'){update.closed_at=new Date().toISOString();update.approval_status='approved'}
-   const {data,error}=await supabase.from('incidents').update(update).eq('id',selected.id).select().single();
-   if(error){alert(error.message);return}setSelected(data);await loadIncidents()
- }
- async function addCorrective(){
-   if(!selected||!ca.trim())return;
-   const {error}=await supabase.from('incident_corrective_actions').insert({incident_id:selected.id,action:ca,responsible_user_id:caUser||null,due_date:caDue||null,status:'open'});
-   if(error){alert(error.message);return}
-   setCa('');setCaUser('');setCaDue('');
-   const {data}=await supabase.from('incident_corrective_actions').select('*').eq('incident_id',selected.id).order('created_at');setActions(data||[]);
-   if(selected.status==='reported'||selected.status==='under_investigation')await saveInvestigation('pending_corrective_actions')
- }
- async function closeAction(a:any){
-   const {error}=await supabase.from('incident_corrective_actions').update({status:'completed',verified_by:session.user.id,verified_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',a.id);
-   if(error){alert(error.message);return}
-   const {data}=await supabase.from('incident_corrective_actions').select('*').eq('incident_id',selected.id).order('created_at');setActions(data||[])
- }
- async function createUser(e:any){
-   e.preventDefault();setAdminMsg('');
-   const {data,error}=await supabase.functions.invoke('admin-users',{body:{action:'create',...userForm}});
-   if(error||data?.error){setAdminMsg(data?.error||error?.message||'Error');return}
-   setAdminMsg(t('User created successfully','تم إنشاء المستخدم بنجاح'));
-   setUserForm({username:'',full_name:'',password:'',role:'staff',department:'HSS',module_permissions:{...defaultPerms}});
-   await loadUsers()
- }
- async function updateUser(id:string,updates:any){
-   setAdminMsg('');
-   const {data,error}=await supabase.functions.invoke('admin-users',{body:{action:'update',id,...updates}});
-   if(error||data?.error){setAdminMsg(data?.error||error?.message||'Error');return}
-   await loadUsers()
- }
- async function resetPassword(u:any){
-   const p=prompt(t(`Temporary password for ${u.username} (10+ characters)`,`كلمة المرور المؤقتة للمستخدم ${u.username} (١٠ أحرف على الأقل)`));
-   if(!p)return;
-   const {data,error}=await supabase.functions.invoke('admin-users',{body:{action:'reset_password',id:u.id,password:p}});
-   if(error||data?.error){alert(data?.error||error?.message);return}
-   alert(t('Temporary password updated. User must change it at next login.','تم تحديث كلمة المرور المؤقتة، ويجب على المستخدم تغييرها عند تسجيل الدخول التالي.'));
-   await loadUsers()
- }
+ async function changePassword(e:any){e.preventDefault();setError('');if(newPassword.length<10){setError(t('Password must be at least 10 characters','يجب ألا تقل كلمة المرور عن ١٠ أحرف'));return}if(newPassword!==confirmPassword){setError(t('Passwords do not match','كلمتا المرور غير متطابقتين'));return}const {error:uErr}=await supabase.auth.updateUser({password:newPassword});if(uErr){setError(uErr.message);return}const {error:fErr}=await supabase.functions.invoke('admin-users',{body:{action:'complete_password_change'}});if(fErr){setError(fErr.message);return}setNewPassword('');setConfirmPassword('');await loadProfile(session.user.id)}
+
+ async function submitIncident(e:any){e.preventDefault();if(!session)return;const {error}=await supabase.from('incidents').insert({...form,status:'reported',approval_status:'pending',reported_by:session.user.id});if(error){alert(error.message);return}setForm({category:'Health & Safety',incident_type:'',department:'',building:'',location:'',description:'',severity:'medium',persons_involved:'',injury:false,immediate_action:''});await loadIncidents();setPage('incidents')}
+ async function openIncident(i:any){setSelected(i);setInvestigation(i.investigation_summary||'');setRootCause(i.root_cause||'');setInvestigator(i.investigator_id||'');const {data}=await supabase.from('incident_corrective_actions').select('*').eq('incident_id',i.id).order('created_at');setActions(data||[]);setPage('detail')}
+ async function saveInvestigation(status?:string){if(!selected)return;const update:any={investigation_summary:investigation,root_cause:rootCause,investigator_id:investigator||null,updated_at:new Date().toISOString()};if(status)update.status=status;if(status==='closed'){update.closed_at=new Date().toISOString();update.approval_status='approved'}const {data,error}=await supabase.from('incidents').update(update).eq('id',selected.id).select().single();if(error){alert(error.message);return}setSelected(data);await loadIncidents()}
+ async function addCorrective(){if(!selected||!ca.trim())return;const {error}=await supabase.from('incident_corrective_actions').insert({incident_id:selected.id,action:ca,responsible_user_id:caUser||null,due_date:caDue||null,status:'open'});if(error){alert(error.message);return}setCa('');setCaUser('');setCaDue('');const {data}=await supabase.from('incident_corrective_actions').select('*').eq('incident_id',selected.id).order('created_at');setActions(data||[]);if(['reported','under_investigation'].includes(selected.status))await saveInvestigation('pending_corrective_actions')}
+ async function closeAction(a:any){const {error}=await supabase.from('incident_corrective_actions').update({status:'completed',verified_by:session.user.id,verified_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',a.id);if(error){alert(error.message);return}const {data}=await supabase.from('incident_corrective_actions').select('*').eq('incident_id',selected.id).order('created_at');setActions(data||[])}
+
+ async function createUser(e:any){e.preventDefault();setAdminMsg('');const {data,error}=await supabase.functions.invoke('admin-users',{body:{action:'create',...userForm}});if(error||data?.error){setAdminMsg(data?.error||error?.message||'Error');return}setAdminMsg(t('User created successfully','تم إنشاء المستخدم بنجاح'));setUserForm({username:'',full_name:'',password:'',role:'staff',department:'HSS',module_permissions:{...defaultPerms}});await loadUsers()}
+ async function updateUser(id:string,updates:any){setAdminMsg('');const {data,error}=await supabase.functions.invoke('admin-users',{body:{action:'update',id,...updates}});if(error||data?.error){setAdminMsg(data?.error||error?.message||'Error');return}await loadUsers()}
+ async function resetPassword(u:any){const p=prompt(t(`Temporary password for ${u.username} (10+ characters)`,`كلمة المرور المؤقتة للمستخدم ${u.username} (١٠ أحرف على الأقل)`));if(!p)return;const {data,error}=await supabase.functions.invoke('admin-users',{body:{action:'reset_password',id:u.id,password:p}});if(error||data?.error){alert(data?.error||error?.message);return}alert(t('Temporary password updated','تم تحديث كلمة المرور المؤقتة'));await loadUsers()}
+
+ async function createPs(e:any){e.preventDefault();const row={...psForm,source_record_key:`MANUAL-${crypto.randomUUID()}`,source_year:new Date().getFullYear(),start_date:psForm.start_date||new Date().toISOString().slice(0,10)};const {error}=await supabase.from('physical_security_records').insert(row);if(error){alert(error.message);return}setPsForm({type:'Task',system:'',sub_system:'',description:'',location:'',area:'',criticality:'Medium',start_date:'',status:'Open',remarks:''});await loadPs()}
+ async function createAg(e:any){e.preventDefault();const row={...agForm,source_record_key:`MANUAL-${crypto.randomUUID()}`,plant_units:agForm.plant_units?Number(agForm.plant_units):null,check_date:agForm.check_date||new Date().toISOString().slice(0,10),created_by:session.user.id};const {error}=await supabase.from('agriculture_checklists').insert(row);if(error){alert(error.message);return}setAgForm({area_type:'indoor',location:'',landscape_category:'Indoor Plants',activity:'Watering',plant_units:'',status:'planned',check_date:'',remarks:'',contractor:''});await loadAg()}
+ async function createWo(e:any){e.preventDefault();const row={...woForm,assigned_to:woForm.assigned_to||null,due_date:woForm.due_date||null,created_by:session.user.id,workflow_status:woForm.assigned_to?'assigned':'open',checklist:[],evidence_urls:[]};const {error}=await supabase.from('work_orders').insert(row);if(error){alert(error.message);return}setWoForm({type:'PPM',module:'physical_security',system:'',asset_id:'',location:'',description:'',priority:'medium',assigned_to:'',due_date:''});await loadWo()}
+ async function updateWo(id:string,status:string){const update:any={workflow_status:status,updated_at:new Date().toISOString()};if(status==='completed'){update.closed_at=new Date().toISOString();update.overdue=false}const {error}=await supabase.from('work_orders').update(update).eq('id',id);if(error){alert(error.message);return}await loadWo()}
+ async function createPpm(e:any){e.preventDefault();const row={...ppmForm,interval_value:Number(ppmForm.interval_value||1),sla_hours:Number(ppmForm.sla_hours||24),assigned_to:ppmForm.assigned_to||null,start_date:ppmForm.start_date,next_due_date:ppmForm.start_date,checklist:[],created_by:session.user.id};const {error}=await supabase.from('ppm_schedules').insert(row);if(error){alert(error.message);return}setPpmForm({module:'physical_security',system:'',sub_system:'',asset_id:'',location:'',description:'',frequency:'monthly',interval_value:1,start_date:'',priority:'medium',sla_hours:24,assigned_to:''});await loadPpm()}
+ async function markRead(id:string){const {error}=await supabase.from('notifications').update({read_at:new Date().toISOString()}).eq('id',id);if(error){alert(error.message);return}await loadNotifications()}
+
+ const dashboard=useMemo(()=>({
+  incidentOpen:incidents.filter(x=>x.status!=='closed').length,
+  incidentCritical:incidents.filter(x=>['high','critical'].includes((x.severity||'').toLowerCase())).length,
+  psHigh:ps.filter(x=>(x.criticality||'').toLowerCase()==='high').length,
+  agCompleted:ag.filter(x=>(x.status||'').toLowerCase()==='completed').length,
+  woOpen:wo.filter(x=>!['completed','cancelled'].includes(x.workflow_status)).length,
+  woOverdue:wo.filter(x=>x.overdue).length,
+  ppmActive:ppm.filter(x=>x.active).length,
+  unread:notifications.filter(x=>!x.read_at).length
+ }),[incidents,ps,ag,wo,ppm,notifications]);
 
  if(loading)return <main className='login'><section className='card'><h2>{t('Loading...','جارٍ التحميل...')}</h2></section></main>;
-
- if(!session)return <main className='login'>
-   <div className='lang'><button onClick={()=>setLang('en')}>English</button><button onClick={()=>setLang('ar')}>العربية</button></div>
-   <section className='card'><div className='brand'>HSS</div>
-    <h1>{t('HSS & Facilities Digital Portal','البوابة الرقمية للمرافق والصحة والسلامة والأمن')}</h1>
-    <p className='muted'>{t('Health, Safety, Security, Facilities & Landscaping','الصحة والسلامة والأمن والمرافق والزراعة وتنسيق الحدائق')}</p>
-    {error&&<div className='error'>{error}</div>}
-    <div className='form'>
-     <input placeholder={t('Username or Email','اسم المستخدم أو البريد الإلكتروني')} value={loginId} onChange={e=>setLoginId(e.target.value)}/>
-     <input type='password' placeholder={t('Password','كلمة المرور')} value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()}/>
-     <button className='primary' onClick={login}>{t('Login','دخول')}</button>
-    </div>
-   </section>
- </main>;
-
- if(profile?.must_change_password)return <main className='login'>
-  <div className='lang'><button onClick={()=>setLang('en')}>English</button><button onClick={()=>setLang('ar')}>العربية</button></div>
-  <section className='card'>
-   <h1>{t('Change Temporary Password','تغيير كلمة المرور المؤقتة')}</h1>
-   <p className='muted'>{t('You must create a new password before using the portal.','يجب إنشاء كلمة مرور جديدة قبل استخدام البوابة.')}</p>
-   {error&&<div className='error'>{error}</div>}
-   <form className='form' onSubmit={changePassword}>
-    <input type='password' placeholder={t('New Password','كلمة المرور الجديدة')} value={newPassword} onChange={e=>setNewPassword(e.target.value)}/>
-    <input type='password' placeholder={t('Confirm Password','تأكيد كلمة المرور')} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/>
-    <button className='primary'>{t('Change Password','تغيير كلمة المرور')}</button>
-   </form>
-  </section>
- </main>;
-
- const open=incidents.filter(x=>x.status!=='closed').length;
- const critical=incidents.filter(x=>['high','critical'].includes((x.severity||'').toLowerCase())).length;
- const activeUsers=users.filter(u=>u.active).length;
+ if(!session)return <main className='login'><div className='lang'><button onClick={()=>setLang('en')}>English</button><button onClick={()=>setLang('ar')}>العربية</button></div><section className='card'><div className='brand'>HSS</div><h1>{t('HSS & Facilities Digital Portal','البوابة الرقمية للمرافق والصحة والسلامة والأمن')}</h1><p className='muted'>{t('Health, Safety, Security, Facilities & Landscaping','الصحة والسلامة والأمن والمرافق والزراعة وتنسيق الحدائق')}</p>{error&&<div className='error'>{error}</div>}<div className='form'><input placeholder={t('Username or Email','اسم المستخدم أو البريد الإلكتروني')} value={loginId} onChange={e=>setLoginId(e.target.value)}/><input type='password' placeholder={t('Password','كلمة المرور')} value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()}/><button className='primary' onClick={login}>{t('Login','دخول')}</button></div></section></main>;
+ if(profile?.must_change_password)return <main className='login'><div className='lang'><button onClick={()=>setLang('en')}>English</button><button onClick={()=>setLang('ar')}>العربية</button></div><section className='card'><h1>{t('Change Temporary Password','تغيير كلمة المرور المؤقتة')}</h1><p className='muted'>{t('You must create a new password before using the portal.','يجب إنشاء كلمة مرور جديدة قبل استخدام البوابة.')}</p>{error&&<div className='error'>{error}</div>}<form className='form' onSubmit={changePassword}><input type='password' placeholder={t('New Password','كلمة المرور الجديدة')} value={newPassword} onChange={e=>setNewPassword(e.target.value)}/><input type='password' placeholder={t('Confirm Password','تأكيد كلمة المرور')} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/><button className='primary'>{t('Change Password','تغيير كلمة المرور')}</button></form></section></main>;
 
  return <div className='shell'>
   <aside className='sidebar'><h2>HSS</h2>
    <button onClick={()=>setPage('dashboard')}>{t('Dashboard','لوحة المعلومات')}</button>
-   <button onClick={()=>setPage('incidents')}>{t('Incident Management','إدارة الحوادث')}</button>
-   <button onClick={()=>setPage('new')}>{t('New Incident','حادث جديد')}</button>
+   {can('health_safety')&&<><button onClick={()=>setPage('incidents')}>{t('Incident Management','إدارة الحوادث')}</button><button onClick={()=>setPage('new')}>{t('New Incident','حادث جديد')}</button></>}
+   {can('physical_security')&&<button onClick={()=>setPage('security')}>{t('Physical Security','الأمن المادي')}</button>}
+   {can('agriculture')&&<button onClick={()=>setPage('agriculture')}>{t('Agriculture & Landscaping','الزراعة وتنسيق الحدائق')}</button>}
+   <button onClick={()=>setPage('workorders')}>{t('Work Orders','أوامر العمل')}</button>
+   {(can('physical_security')||can('facilities')||can('agriculture'))&&<button onClick={()=>setPage('ppm')}>{t('PPM Schedules','جداول الصيانة الوقائية')}</button>}
+   <button onClick={()=>setPage('notifications')}>{t('Notifications','الإشعارات')} {dashboard.unread?`(${num(dashboard.unread)})`:''}</button>
    {isAdmin&&<button onClick={()=>setPage('users')}>{t('User Management','إدارة المستخدمين')}</button>}
+   {can('ai')&&<button onClick={()=>setPage('ai')}>{t('Ask HSS AI','اسأل مساعد HSS الذكي')}</button>}
    <button onClick={logout}>{t('Logout','تسجيل الخروج')}</button>
   </aside>
-  <main className='main'>
-   <div className='topbar'><span>{profile?.full_name||profile?.username||session.user.email} · {roleName(profile?.role)}</span><div className='lang'><button onClick={()=>setLang('en')}>EN</button><button onClick={()=>setLang('ar')}>العربية</button></div></div>
-   <div className='content'>
+  <main className='main'><div className='topbar'><span>{profile?.full_name||profile?.username||session.user.email} · {roleName(profile?.role)}</span><div className='lang'><button onClick={()=>setLang('en')}>EN</button><button onClick={()=>setLang('ar')}>العربية</button></div></div><div className='content'>
 
-   {page==='dashboard'&&<>
-    <h1>{t('Management Dashboard','لوحة معلومات الإدارة')}</h1>
-    <div className='grid'>
-     <div className='card kpi'><div className='label'>{t('Total Incidents','إجمالي الحوادث')}</div><div className='value'>{incidents.length}</div></div>
-     <div className='card kpi'><div className='label'>{t('Open Incidents','الحوادث المفتوحة')}</div><div className='value'>{open}</div></div>
-     <div className='card kpi'><div className='label'>{t('High / Critical','عالية / حرجة')}</div><div className='value'>{critical}</div></div>
-     {isAdmin&&<div className='card kpi'><div className='label'>{t('Active Users','المستخدمون النشطون')}</div><div className='value'>{activeUsers}</div></div>}
-    </div>
-   </>}
+  {page==='dashboard'&&<><h1>{t('Management Dashboard','لوحة معلومات الإدارة')}</h1><div className='grid'>
+   {can('health_safety')&&<div className='card kpi'><div className='label'>{t('Open Incidents','الحوادث المفتوحة')}</div><div className='value'>{num(dashboard.incidentOpen)}</div></div>}
+   {can('physical_security')&&<div className='card kpi'><div className='label'>{t('Physical Security Records','سجلات الأمن المادي')}</div><div className='value'>{num(ps.length)}</div></div>}
+   {can('agriculture')&&<div className='card kpi'><div className='label'>{t('Agriculture Tasks','مهام الزراعة')}</div><div className='value'>{num(ag.length)}</div></div>}
+   <div className='card kpi'><div className='label'>{t('Open Work Orders','أوامر العمل المفتوحة')}</div><div className='value'>{num(dashboard.woOpen)}</div></div>
+   <div className='card kpi'><div className='label'>{t('Overdue Work Orders','أوامر العمل المتأخرة')}</div><div className='value'>{num(dashboard.woOverdue)}</div></div>
+   <div className='card kpi'><div className='label'>{t('Active PPM Schedules','جداول الصيانة الوقائية النشطة')}</div><div className='value'>{num(dashboard.ppmActive)}</div></div>
+   <div className='card kpi'><div className='label'>{t('Unread Notifications','الإشعارات غير المقروءة')}</div><div className='value'>{num(dashboard.unread)}</div></div>
+   {isAdmin&&<div className='card kpi'><div className='label'>{t('Active Users','المستخدمون النشطون')}</div><div className='value'>{num(users.filter(u=>u.active).length)}</div></div>}
+  </div></>}
 
-   {page==='incidents'&&<>
-    <div className='actions'><h1 style={{flex:1}}>{t('Incident Management','إدارة الحوادث')}</h1><button className='primary' onClick={()=>setPage('new')}>{t('New Incident','حادث جديد')}</button></div>
-    <div className='card' style={{overflowX:'auto'}}><table><thead><tr><th>{t('No.','الرقم')}</th><th>{t('Date','التاريخ')}</th><th>{t('Category','الفئة')}</th><th>{t('Type','النوع')}</th><th>{t('Location','الموقع')}</th><th>{t('Severity','الخطورة')}</th><th>{t('Status','الحالة')}</th><th></th></tr></thead>
-    <tbody>{incidents.map(i=><tr key={i.id}><td>{i.incident_no}</td><td>{i.incident_date?.slice(0,10)}</td><td>{i.category}</td><td>{i.incident_type}</td><td>{i.building||i.location}</td><td>{i.severity}</td><td>{i.status}</td><td><button onClick={()=>openIncident(i)}>{t('Open','فتح')}</button></td></tr>)}</tbody></table></div>
-   </>}
+  {page==='incidents'&&<><div className='actions'><h1 style={{flex:1}}>{t('Incident Management','إدارة الحوادث')}</h1><button className='primary' onClick={()=>setPage('new')}>{t('New Incident','حادث جديد')}</button></div><div className='card' style={{overflowX:'auto'}}><table><thead><tr><th>{t('No.','الرقم')}</th><th>{t('Date','التاريخ')}</th><th>{t('Category','الفئة')}</th><th>{t('Type','النوع')}</th><th>{t('Location','الموقع')}</th><th>{t('Severity','الخطورة')}</th><th>{t('Status','الحالة')}</th><th></th></tr></thead><tbody>{incidents.map(i=><tr key={i.id}><td>{i.incident_no}</td><td>{date(i.incident_date)}</td><td>{i.category}</td><td>{i.incident_type}</td><td>{i.building||i.location}</td><td>{i.severity}</td><td>{statusLabel(i.status)}</td><td><button onClick={()=>openIncident(i)}>{t('Open','فتح')}</button></td></tr>)}</tbody></table></div></>}
 
-   {page==='new'&&<>
-    <h1>{t('New Incident','تسجيل حادث جديد')}</h1>
-    <form className='card form' onSubmit={submitIncident}>
-     <div className='row'><div><label>{t('Category','الفئة')}</label><select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}><option>Health & Safety</option><option>Physical Security</option><option>Fire & Life Safety</option><option>Facilities</option></select></div><div><label>{t('Incident Type','نوع الحادث')}</label><input required value={form.incident_type} onChange={e=>setForm({...form,incident_type:e.target.value})}/></div></div>
-     <div className='row'><div><label>{t('Department','الإدارة')}</label><input value={form.department} onChange={e=>setForm({...form,department:e.target.value})}/></div><div><label>{t('Building','المبنى')}</label><input value={form.building} onChange={e=>setForm({...form,building:e.target.value})}/></div></div>
-     <div className='row'><div><label>{t('Location','الموقع')}</label><input value={form.location} onChange={e=>setForm({...form,location:e.target.value})}/></div><div><label>{t('Severity','الخطورة')}</label><select value={form.severity} onChange={e=>setForm({...form,severity:e.target.value})}><option value='low'>{t('Low','منخفضة')}</option><option value='medium'>{t('Medium','متوسطة')}</option><option value='high'>{t('High','عالية')}</option><option value='critical'>{t('Critical','حرجة')}</option></select></div></div>
-     <div><label>{t('Description','وصف الحادث')}</label><textarea required value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></div>
-     <div><label>{t('Persons Involved','الأشخاص المعنيون')}</label><textarea value={form.persons_involved} onChange={e=>setForm({...form,persons_involved:e.target.value})}/></div>
-     <label><input style={{width:'auto'}} type='checkbox' checked={form.injury} onChange={e=>setForm({...form,injury:e.target.checked})}/> {t('Injury','إصابة')}</label>
-     <div><label>{t('Immediate Action','الإجراء الفوري')}</label><textarea value={form.immediate_action} onChange={e=>setForm({...form,immediate_action:e.target.value})}/></div>
-     <button className='primary'>{t('Submit Incident','تسجيل الحادث')}</button>
-    </form>
-   </>}
+  {page==='new'&&<><h1>{t('New Incident','تسجيل حادث جديد')}</h1><form className='card form' onSubmit={submitIncident}><div className='row'><div><label>{t('Category','الفئة')}</label><select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}><option>Health & Safety</option><option>Physical Security</option><option>Fire & Life Safety</option><option>Facilities</option></select></div><div><label>{t('Incident Type','نوع الحادث')}</label><input required value={form.incident_type} onChange={e=>setForm({...form,incident_type:e.target.value})}/></div></div><div className='row'><div><label>{t('Department','الإدارة')}</label><input value={form.department} onChange={e=>setForm({...form,department:e.target.value})}/></div><div><label>{t('Building','المبنى')}</label><input value={form.building} onChange={e=>setForm({...form,building:e.target.value})}/></div></div><div className='row'><div><label>{t('Location','الموقع')}</label><input value={form.location} onChange={e=>setForm({...form,location:e.target.value})}/></div><div><label>{t('Severity','الخطورة')}</label><select value={form.severity} onChange={e=>setForm({...form,severity:e.target.value})}><option value='low'>{t('Low','منخفضة')}</option><option value='medium'>{t('Medium','متوسطة')}</option><option value='high'>{t('High','عالية')}</option><option value='critical'>{t('Critical','حرجة')}</option></select></div></div><div><label>{t('Description','وصف الحادث')}</label><textarea required value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></div><div><label>{t('Persons Involved','الأشخاص المعنيون')}</label><textarea value={form.persons_involved} onChange={e=>setForm({...form,persons_involved:e.target.value})}/></div><label><input style={{width:'auto'}} type='checkbox' checked={form.injury} onChange={e=>setForm({...form,injury:e.target.checked})}/> {t('Injury','إصابة')}</label><div><label>{t('Immediate Action','الإجراء الفوري')}</label><textarea value={form.immediate_action} onChange={e=>setForm({...form,immediate_action:e.target.value})}/></div><button className='primary'>{t('Submit Incident','تسجيل الحادث')}</button></form></>}
 
-   {page==='detail'&&selected&&<>
-    <div className='actions'><button onClick={()=>setPage('incidents')}>{t('Back','رجوع')}</button><h1 style={{flex:1}}>{selected.incident_no}</h1><span>{selected.status}</span></div>
-    <div className='grid2'>
-     <div className='card'><p><b>{t('Category','الفئة')}:</b> {selected.category}</p><p><b>{t('Type','النوع')}:</b> {selected.incident_type}</p><p><b>{t('Severity','الخطورة')}:</b> {selected.severity}</p><p><b>{t('Building','المبنى')}:</b> {selected.building||'-'}</p><p><b>{t('Location','الموقع')}:</b> {selected.location||'-'}</p><p><b>{t('Injury','إصابة')}:</b> {selected.injury?t('Yes','نعم'):t('No','لا')}</p></div>
-     <div className='card'><h3>{t('Description','الوصف')}</h3><p>{selected.description}</p><h3>{t('Immediate Action','الإجراء الفوري')}</h3><p>{selected.immediate_action||'-'}</p></div>
-    </div>
-    {manager&&<div className='card form' style={{marginTop:14}}>
-     <h3>{t('Investigation & Root Cause','التحقيق وتحليل السبب الجذري')}</h3>
-     <label>{t('Investigator','المحقق')}</label><select value={investigator} onChange={e=>setInvestigator(e.target.value)}><option value=''>{t('Unassigned','غير مسند')}</option>{users.filter(u=>u.active).map(u=><option key={u.id} value={u.id}>{u.full_name}</option>)}</select>
-     <label>{t('Investigation Summary','ملخص التحقيق')}</label><textarea value={investigation} onChange={e=>setInvestigation(e.target.value)}/>
-     <label>{t('Root Cause Analysis','تحليل السبب الجذري')}</label><textarea value={rootCause} onChange={e=>setRootCause(e.target.value)}/>
-     <div className='actions'><button onClick={()=>saveInvestigation('under_investigation')}>{t('Save Investigation','حفظ التحقيق')}</button><button onClick={()=>saveInvestigation('pending_corrective_actions')}>{t('Corrective Actions Stage','مرحلة الإجراءات التصحيحية')}</button><button className='primary' onClick={()=>saveInvestigation('closed')}>{t('Close Incident','إغلاق الحادث')}</button></div>
-    </div>}
-    <div className='card' style={{marginTop:14}}>
-     <h3>{t('Corrective Actions','الإجراءات التصحيحية')}</h3>
-     <table><thead><tr><th>{t('Action','الإجراء')}</th><th>{t('Responsible','المسؤول')}</th><th>{t('Due Date','تاريخ الاستحقاق')}</th><th>{t('Status','الحالة')}</th><th></th></tr></thead>
-     <tbody>{actions.map(a=>{const u=users.find(x=>x.id===a.responsible_user_id);return <tr key={a.id}><td>{a.action}</td><td>{u?.full_name||'-'}</td><td>{a.due_date||'-'}</td><td>{a.status}</td><td>{a.status!=='completed'&&(manager||a.responsible_user_id===session.user.id)&&<button onClick={()=>closeAction(a)}>{t('Complete','إكمال')}</button>}</td></tr>})}</tbody></table>
-     {manager&&<div className='form' style={{marginTop:12}}><textarea placeholder={t('New corrective action','إجراء تصحيحي جديد')} value={ca} onChange={e=>setCa(e.target.value)}/><div className='row'><select value={caUser} onChange={e=>setCaUser(e.target.value)}><option value=''>{t('Responsible person','الشخص المسؤول')}</option>{users.filter(u=>u.active).map(u=><option key={u.id} value={u.id}>{u.full_name}</option>)}</select><input type='date' value={caDue} onChange={e=>setCaDue(e.target.value)}/></div><button onClick={addCorrective}>{t('Add Corrective Action','إضافة إجراء تصحيحي')}</button></div>}
-    </div>
-   </>}
+  {page==='detail'&&selected&&<><div className='actions'><button onClick={()=>setPage('incidents')}>{t('Back','رجوع')}</button><h1 style={{flex:1}}>{selected.incident_no}</h1><span>{statusLabel(selected.status)}</span></div><div className='grid2'><div className='card'><p>{t('Category','الفئة')}: {selected.category}</p><p>{t('Type','النوع')}: {selected.incident_type}</p><p>{t('Severity','الخطورة')}: {selected.severity}</p><p>{t('Building','المبنى')}: {selected.building||'-'}</p><p>{t('Location','الموقع')}: {selected.location||'-'}</p></div><div className='card'><h3>{t('Description','الوصف')}</h3><p>{selected.description}</p><h3>{t('Immediate Action','الإجراء الفوري')}</h3><p>{selected.immediate_action||'-'}</p></div></div>{manager&&<div className='card form' style={{marginTop:14}}><h3>{t('Investigation & Root Cause','التحقيق وتحليل السبب الجذري')}</h3><label>{t('Investigator','المحقق')}</label><select value={investigator} onChange={e=>setInvestigator(e.target.value)}><option value=''>{t('Unassigned','غير مسند')}</option>{users.filter(u=>u.active).map(u=><option key={u.id} value={u.id}>{u.full_name}</option>)}</select><label>{t('Investigation Summary','ملخص التحقيق')}</label><textarea value={investigation} onChange={e=>setInvestigation(e.target.value)}/><label>{t('Root Cause Analysis','تحليل السبب الجذري')}</label><textarea value={rootCause} onChange={e=>setRootCause(e.target.value)}/><div className='actions'><button onClick={()=>saveInvestigation('under_investigation')}>{t('Save Investigation','حفظ التحقيق')}</button><button onClick={()=>saveInvestigation('pending_corrective_actions')}>{t('Corrective Actions Stage','مرحلة الإجراءات التصحيحية')}</button><button className='primary' onClick={()=>saveInvestigation('closed')}>{t('Close Incident','إغلاق الحادث')}</button></div></div>}<div className='card' style={{marginTop:14}}><h3>{t('Corrective Actions','الإجراءات التصحيحية')}</h3><table><thead><tr><th>{t('Action','الإجراء')}</th><th>{t('Responsible','المسؤول')}</th><th>{t('Due Date','تاريخ الاستحقاق')}</th><th>{t('Status','الحالة')}</th><th></th></tr></thead><tbody>{actions.map(a=>{const u=users.find(x=>x.id===a.responsible_user_id);return <tr key={a.id}><td>{a.action}</td><td>{u?.full_name||'-'}</td><td>{date(a.due_date)}</td><td>{statusLabel(a.status)}</td><td>{a.status!=='completed'&&(manager||a.responsible_user_id===session.user.id)&&<button onClick={()=>closeAction(a)}>{t('Complete','إكمال')}</button>}</td></tr>})}</tbody></table>{manager&&<div className='form' style={{marginTop:12}}><textarea placeholder={t('New corrective action','إجراء تصحيحي جديد')} value={ca} onChange={e=>setCa(e.target.value)}/><div className='row'><select value={caUser} onChange={e=>setCaUser(e.target.value)}><option value=''>{t('Responsible person','الشخص المسؤول')}</option>{users.filter(u=>u.active).map(u=><option key={u.id} value={u.id}>{u.full_name}</option>)}</select><input type='date' value={caDue} onChange={e=>setCaDue(e.target.value)}/></div><button onClick={addCorrective}>{t('Add Corrective Action','إضافة إجراء تصحيحي')}</button></div>}</div></>}
 
-   {page==='users'&&isAdmin&&<>
-    <h1>{t('User Management','إدارة المستخدمين')}</h1>
-    <div className='grid2'>
-     <form className='card form' onSubmit={createUser}>
-      <h3>{t('Create User','إنشاء مستخدم')}</h3>
-      <div className='row'><div><label>{t('Username','اسم المستخدم')}</label><input required value={userForm.username} onChange={e=>setUserForm({...userForm,username:e.target.value})}/></div><div><label>{t('Full Name','الاسم الكامل')}</label><input required value={userForm.full_name} onChange={e=>setUserForm({...userForm,full_name:e.target.value})}/></div></div>
-      <div><label>{t('Temporary Password','كلمة المرور المؤقتة')}</label><input type='password' minLength={10} required value={userForm.password} onChange={e=>setUserForm({...userForm,password:e.target.value})}/></div>
-      <div className='row'><div><label>{t('Role','الصلاحية')}</label><select value={userForm.role} onChange={e=>setUserForm({...userForm,role:e.target.value})}><option value='staff'>{t('Staff','موظف')}</option><option value='supervisor'>{t('Supervisor','مشرف')}</option><option value='management'>{t('Management','الإدارة')}</option><option value='contractor'>{t('Contractor','مقاول')}</option><option value='viewer'>{t('Viewer','مشاهدة فقط')}</option><option value='admin'>{t('Admin','مدير النظام')}</option></select></div><div><label>{t('Department','الإدارة')}</label><select value={userForm.department} onChange={e=>setUserForm({...userForm,department:e.target.value})}><option>HSS</option><option>Physical Security</option><option>Health & Safety</option><option>Facilities</option><option>Agriculture</option></select></div></div>
-      <label>{t('Module Access','صلاحيات الوحدات')}</label>
-      {modules.map(([key,en,ar])=><label key={key} style={{display:'flex',alignItems:'center',gap:8,color:'#222'}}><input style={{width:'auto'}} type='checkbox' checked={!!userForm.module_permissions[key]} onChange={e=>setUserForm({...userForm,module_permissions:{...userForm.module_permissions,[key]:e.target.checked}})}/>{t(en,ar)}</label>)}
-      <button className='primary'>{t('Create User','إنشاء المستخدم')}</button>{adminMsg&&<p>{adminMsg}</p>}
-     </form>
-     <div className='card'><h3>{t('User Administration','إدارة الحسابات')}</h3><p className='muted'>{t('New users log in with the username you provide and must change their temporary password on first login.','يسجل المستخدمون الجدد الدخول باسم المستخدم الذي تحدده، ويجب عليهم تغيير كلمة المرور المؤقتة عند أول دخول.')}</p><p>{t('Active users','المستخدمون النشطون')}: {activeUsers}</p><p>{t('Total users','إجمالي المستخدمين')}: {users.length}</p></div>
-    </div>
-    <div className='card' style={{marginTop:14,overflowX:'auto'}}>
-     <table><thead><tr><th>{t('Username','اسم المستخدم')}</th><th>{t('Name','الاسم')}</th><th>{t('Role','الصلاحية')}</th><th>{t('Department','الإدارة')}</th><th>{t('Status','الحالة')}</th><th>{t('Actions','الإجراءات')}</th></tr></thead>
-     <tbody>{users.map(u=><tr key={u.id}>
-      <td>{u.username}</td><td>{u.full_name}</td>
-      <td><select value={u.role} onChange={e=>updateUser(u.id,{role:e.target.value})}><option value='staff'>{t('Staff','موظف')}</option><option value='supervisor'>{t('Supervisor','مشرف')}</option><option value='management'>{t('Management','الإدارة')}</option><option value='contractor'>{t('Contractor','مقاول')}</option><option value='viewer'>{t('Viewer','مشاهدة فقط')}</option><option value='admin'>{t('Admin','مدير النظام')}</option></select></td>
-      <td><select value={u.department} onChange={e=>updateUser(u.id,{department:e.target.value})}><option>HSS</option><option>Physical Security</option><option>Health & Safety</option><option>Facilities</option><option>Agriculture</option></select></td>
-      <td>{u.active?t('Active','نشط'):t('Disabled','معطل')}{u.must_change_password?` · ${t('Password change required','يتطلب تغيير كلمة المرور')}`:''}</td>
-      <td><div className='actions'><button onClick={()=>updateUser(u.id,{active:!u.active})}>{u.active?t('Disable','تعطيل'):t('Enable','تفعيل')}</button><button onClick={()=>resetPassword(u)}>{t('Reset Password','إعادة تعيين كلمة المرور')}</button></div></td>
-     </tr>)}</tbody></table>
-    </div>
-   </>}
-   </div>
-  </main>
- </div>
+  {page==='security'&&<><h1>{t('Physical Security','الأمن المادي')}</h1><div className='grid'><div className='card kpi'><div className='label'>{t('Total Records','إجمالي السجلات')}</div><div className='value'>{num(ps.length)}</div></div><div className='card kpi'><div className='label'>{t('High Criticality','أولوية عالية')}</div><div className='value'>{num(dashboard.psHigh)}</div></div></div><form className='card form' style={{marginTop:14}} onSubmit={createPs}><h3>{t('New Security Record','سجل أمني جديد')}</h3><div className='row'><select value={psForm.type} onChange={e=>setPsForm({...psForm,type:e.target.value})}><option>Task</option><option>PPM</option><option>Project</option><option>Corrective</option></select><input placeholder={t('System','النظام')} required value={psForm.system} onChange={e=>setPsForm({...psForm,system:e.target.value})}/></div><div className='row'><input placeholder={t('Sub-System','النظام الفرعي')} value={psForm.sub_system} onChange={e=>setPsForm({...psForm,sub_system:e.target.value})}/><input placeholder={t('Location','الموقع')} required value={psForm.location} onChange={e=>setPsForm({...psForm,location:e.target.value})}/></div><div className='row'><select value={psForm.criticality} onChange={e=>setPsForm({...psForm,criticality:e.target.value})}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select><input type='date' value={psForm.start_date} onChange={e=>setPsForm({...psForm,start_date:e.target.value})}/></div><textarea placeholder={t('Description','الوصف')} value={psForm.description} onChange={e=>setPsForm({...psForm,description:e.target.value})}/><textarea placeholder={t('Remarks','الملاحظات')} value={psForm.remarks} onChange={e=>setPsForm({...psForm,remarks:e.target.value})}/><button className='primary'>{t('Save Record','حفظ السجل')}</button></form><div className='card' style={{marginTop:14,overflowX:'auto'}}><table><thead><tr><th>{t('Type','النوع')}</th><th>{t('System','النظام')}</th><th>{t('Location','الموقع')}</th><th>{t('Criticality','الأولوية')}</th><th>{t('Date','التاريخ')}</th><th>{t('Status','الحالة')}</th></tr></thead><tbody>{ps.map(r=><tr key={r.id}><td>{r.type}</td><td>{r.system}</td><td>{r.location}</td><td>{r.criticality}</td><td>{date(r.start_date)}</td><td>{r.status}</td></tr>)}</tbody></table></div></>}
+
+  {page==='agriculture'&&<><h1>{t('Agriculture & Landscaping','الزراعة وتنسيق الحدائق')}</h1><div className='grid'><div className='card kpi'><div className='label'>{t('Checklist Tasks','مهام قوائم الفحص')}</div><div className='value'>{num(ag.length)}</div></div><div className='card kpi'><div className='label'>{t('Indoor','داخلي')}</div><div className='value'>{num(ag.filter(x=>x.area_type==='indoor').length)}</div></div><div className='card kpi'><div className='label'>{t('Outdoor','خارجي')}</div><div className='value'>{num(ag.filter(x=>x.area_type==='outdoor').length)}</div></div></div><form className='card form' style={{marginTop:14}} onSubmit={createAg}><h3>{t('New Agriculture Checklist Entry','سجل جديد لقائمة فحص الزراعة')}</h3><div className='row'><select value={agForm.area_type} onChange={e=>setAgForm({...agForm,area_type:e.target.value})}><option value='indoor'>{t('Indoor','داخلي')}</option><option value='outdoor'>{t('Outdoor','خارجي')}</option></select><input placeholder={t('Location','الموقع')} required value={agForm.location} onChange={e=>setAgForm({...agForm,location:e.target.value})}/></div><div className='row'><input placeholder={t('Landscape Category','فئة التشجير')} value={agForm.landscape_category} onChange={e=>setAgForm({...agForm,landscape_category:e.target.value})}/><input placeholder={t('Activity','النشاط')} required value={agForm.activity} onChange={e=>setAgForm({...agForm,activity:e.target.value})}/></div><div className='row'><input type='number' min='0' placeholder={t('Plant Units','عدد وحدات النباتات')} value={agForm.plant_units} onChange={e=>setAgForm({...agForm,plant_units:e.target.value})}/><input type='date' value={agForm.check_date} onChange={e=>setAgForm({...agForm,check_date:e.target.value})}/></div><div className='row'><select value={agForm.status} onChange={e=>setAgForm({...agForm,status:e.target.value})}><option value='planned'>{t('Planned','مخطط')}</option><option value='completed'>{t('Completed','مكتمل')}</option><option value='not_completed'>{t('Not Completed','غير مكتمل')}</option><option value='partial'>{t('Partially Completed','مكتمل جزئياً')}</option></select><input placeholder={t('Contractor','المقاول')} value={agForm.contractor} onChange={e=>setAgForm({...agForm,contractor:e.target.value})}/></div><textarea placeholder={t('Remarks','الملاحظات')} value={agForm.remarks} onChange={e=>setAgForm({...agForm,remarks:e.target.value})}/><button className='primary'>{t('Save Checklist','حفظ قائمة الفحص')}</button></form><div className='card' style={{marginTop:14,overflowX:'auto'}}><table><thead><tr><th>{t('Area','المجال')}</th><th>{t('Location','الموقع')}</th><th>{t('Category','الفئة')}</th><th>{t('Activity','النشاط')}</th><th>{t('Date','التاريخ')}</th><th>{t('Status','الحالة')}</th></tr></thead><tbody>{ag.map(r=><tr key={r.id}><td>{r.area_type==='indoor'?t('Indoor','داخلي'):t('Outdoor','خارجي')}</td><td>{r.location}</td><td>{r.landscape_category}</td><td>{r.activity}</td><td>{date(r.check_date)}</td><td>{statusLabel(r.status)}</td></tr>)}</tbody></table></div></>}
+
+  {page==='workorders'&&<><h1>{t('Work Orders','أوامر العمل')}</h1><div className='grid'><div className='card kpi'><div className='label'>{t('Total','الإجمالي')}</div><div className='value'>{num(wo.length)}</div></div><div className='card kpi'><div className='label'>{t('Open','مفتوح')}</div><div className='value'>{num(dashboard.woOpen)}</div></div><div className='card kpi'><div className='label'>{t('Overdue','متأخر')}</div><div className='value'>{num(dashboard.woOverdue)}</div></div></div><form className='card form' style={{marginTop:14}} onSubmit={createWo}><h3>{t('New Work Order','أمر عمل جديد')}</h3><div className='row'><select value={woForm.type} onChange={e=>setWoForm({...woForm,type:e.target.value})}><option>PPM</option><option>Corrective</option><option>Task</option><option>Inspection Finding</option></select><select value={woForm.module} onChange={e=>setWoForm({...woForm,module:e.target.value})}><option value='physical_security'>{t('Physical Security','الأمن المادي')}</option><option value='agriculture'>{t('Agriculture & Landscaping','الزراعة وتنسيق الحدائق')}</option><option value='health_safety'>{t('Health & Safety','الصحة والسلامة')}</option><option value='facilities'>{t('Facilities Management','إدارة المرافق')}</option></select></div><div className='row'><input placeholder={t('System / Category','النظام / الفئة')} value={woForm.system} onChange={e=>setWoForm({...woForm,system:e.target.value})}/><input placeholder={t('Location','الموقع')} required value={woForm.location} onChange={e=>setWoForm({...woForm,location:e.target.value})}/></div><div className='row'><select value={woForm.priority} onChange={e=>setWoForm({...woForm,priority:e.target.value})}><option value='low'>{t('Low','منخفضة')}</option><option value='medium'>{t('Medium','متوسطة')}</option><option value='high'>{t('High','عالية')}</option><option value='critical'>{t('Critical','حرجة')}</option></select><select value={woForm.assigned_to} onChange={e=>setWoForm({...woForm,assigned_to:e.target.value})}><option value=''>{t('Unassigned','غير مسند')}</option>{users.filter(u=>u.active).map(u=><option key={u.id} value={u.id}>{u.full_name}</option>)}</select></div><div className='row'><input type='date' value={woForm.due_date} onChange={e=>setWoForm({...woForm,due_date:e.target.value})}/><input placeholder={t('Asset ID','رقم الأصل')} value={woForm.asset_id} onChange={e=>setWoForm({...woForm,asset_id:e.target.value})}/></div><textarea placeholder={t('Description','الوصف')} value={woForm.description} onChange={e=>setWoForm({...woForm,description:e.target.value})}/><button className='primary'>{t('Create Work Order','إنشاء أمر العمل')}</button></form><div className='card' style={{marginTop:14,overflowX:'auto'}}><table><thead><tr><th>{t('Type','النوع')}</th><th>{t('Module','الوحدة')}</th><th>{t('System','النظام')}</th><th>{t('Location','الموقع')}</th><th>{t('Priority','الأولوية')}</th><th>{t('Due Date','تاريخ الاستحقاق')}</th><th>{t('Status','الحالة')}</th><th></th></tr></thead><tbody>{wo.map(r=><tr key={r.id}><td>{r.type}</td><td>{r.module}</td><td>{r.system||'-'}</td><td>{r.location}</td><td>{r.priority}</td><td>{date(r.due_date)}</td><td>{statusLabel(r.workflow_status)}</td><td>{r.workflow_status!=='completed'&&<div className='actions'>{['open','assigned'].includes(r.workflow_status)&&<button onClick={()=>updateWo(r.id,'in_progress')}>{t('Start','بدء')}</button>} {['open','assigned','in_progress'].includes(r.workflow_status)&&<button onClick={()=>updateWo(r.id,'pending_verification')}>{t('Submit','إرسال للتحقق')}</button>} {manager&&r.workflow_status==='pending_verification'&&<button onClick={()=>updateWo(r.id,'completed')}>{t('Approve','اعتماد')}</button>}</div>}</td></tr>)}</tbody></table></div></>}
+
+  {page==='ppm'&&<><h1>{t('PPM Schedules','جداول الصيانة الوقائية')}</h1><div className='grid'><div className='card kpi'><div className='label'>{t('Active Schedules','الجداول النشطة')}</div><div className='value'>{num(dashboard.ppmActive)}</div></div></div>{manager&&<form className='card form' style={{marginTop:14}} onSubmit={createPpm}><h3>{t('New PPM Schedule','جدول صيانة وقائية جديد')}</h3><div className='row'><select value={ppmForm.module} onChange={e=>setPpmForm({...ppmForm,module:e.target.value})}><option value='physical_security'>{t('Physical Security','الأمن المادي')}</option><option value='facilities'>{t('Facilities Management','إدارة المرافق')}</option><option value='agriculture'>{t('Agriculture & Landscaping','الزراعة وتنسيق الحدائق')}</option></select><input placeholder={t('System','النظام')} required value={ppmForm.system} onChange={e=>setPpmForm({...ppmForm,system:e.target.value})}/></div><div className='row'><input placeholder={t('Sub-System','النظام الفرعي')} value={ppmForm.sub_system} onChange={e=>setPpmForm({...ppmForm,sub_system:e.target.value})}/><input placeholder={t('Location','الموقع')} required value={ppmForm.location} onChange={e=>setPpmForm({...ppmForm,location:e.target.value})}/></div><div className='row'><select value={ppmForm.frequency} onChange={e=>setPpmForm({...ppmForm,frequency:e.target.value})}><option value='daily'>{t('Daily','يومي')}</option><option value='weekly'>{t('Weekly','أسبوعي')}</option><option value='monthly'>{t('Monthly','شهري')}</option><option value='quarterly'>{t('Quarterly','ربع سنوي')}</option><option value='semiannual'>{t('Semiannual','نصف سنوي')}</option><option value='annual'>{t('Annual','سنوي')}</option></select><input type='date' required value={ppmForm.start_date} onChange={e=>setPpmForm({...ppmForm,start_date:e.target.value})}/></div><div className='row'><input type='number' min='1' value={ppmForm.sla_hours} onChange={e=>setPpmForm({...ppmForm,sla_hours:e.target.value})}/><select value={ppmForm.assigned_to} onChange={e=>setPpmForm({...ppmForm,assigned_to:e.target.value})}><option value=''>{t('Unassigned','غير مسند')}</option>{users.filter(u=>u.active).map(u=><option key={u.id} value={u.id}>{u.full_name}</option>)}</select></div><textarea placeholder={t('Description','الوصف')} value={ppmForm.description} onChange={e=>setPpmForm({...ppmForm,description:e.target.value})}/><button className='primary'>{t('Create Schedule','إنشاء الجدول')}</button></form>}<div className='card' style={{marginTop:14,overflowX:'auto'}}><table><thead><tr><th>{t('Module','الوحدة')}</th><th>{t('System','النظام')}</th><th>{t('Location','الموقع')}</th><th>{t('Frequency','التكرار')}</th><th>{t('Next Due','الاستحقاق القادم')}</th><th>SLA</th><th>{t('Status','الحالة')}</th></tr></thead><tbody>{ppm.map(r=><tr key={r.id}><td>{r.module}</td><td>{r.system}</td><td>{r.location}</td><td>{r.frequency}</td><td>{date(r.next_due_date)}</td><td>{num(r.sla_hours)}h</td><td>{r.active?t('Active','نشط'):t('Inactive','غير نشط')}</td></tr>)}</tbody></table></div></>}
+
+  {page==='notifications'&&<><h1>{t('Notifications','الإشعارات')}</h1><div className='form'>{notifications.length===0&&<div className='card'>{t('No notifications','لا توجد إشعارات')}</div>}{notifications.map(n=><div className='card' key={n.id} style={{opacity:n.read_at?.65:1}}><div className='actions'><div style={{flex:1}}><h3>{n.title}</h3><p>{n.message}</p><p className='muted'>{date(n.created_at)} · {n.severity}</p></div>{!n.read_at&&<button onClick={()=>markRead(n.id)}>{t('Mark Read','تمت القراءة')}</button>}</div></div>)}</div></>}
+
+  {page==='users'&&isAdmin&&<><h1>{t('User Management','إدارة المستخدمين')}</h1><form className='card form' onSubmit={createUser}><h3>{t('Create User','إنشاء مستخدم')}</h3><div className='row'><input required placeholder={t('Username','اسم المستخدم')} value={userForm.username} onChange={e=>setUserForm({...userForm,username:e.target.value})}/><input required placeholder={t('Full Name','الاسم الكامل')} value={userForm.full_name} onChange={e=>setUserForm({...userForm,full_name:e.target.value})}/></div><div className='row'><input type='password' minLength={10} required placeholder={t('Temporary Password','كلمة المرور المؤقتة')} value={userForm.password} onChange={e=>setUserForm({...userForm,password:e.target.value})}/><select value={userForm.role} onChange={e=>setUserForm({...userForm,role:e.target.value})}><option value='staff'>{t('Staff','موظف')}</option><option value='supervisor'>{t('Supervisor','مشرف')}</option><option value='management'>{t('Management','الإدارة')}</option><option value='admin'>{t('Admin','مدير النظام')}</option><option value='contractor'>{t('Contractor','مقاول')}</option><option value='viewer'>{t('Viewer','مشاهدة فقط')}</option></select></div><input placeholder={t('Department','الإدارة')} value={userForm.department} onChange={e=>setUserForm({...userForm,department:e.target.value})}/><div className='grid'>{moduleOptions.map(([k,en,ar])=><label key={k} style={{color:'#222'}}><input style={{width:'auto'}} type='checkbox' checked={!!userForm.module_permissions[k]} onChange={e=>setUserForm({...userForm,module_permissions:{...userForm.module_permissions,[k]:e.target.checked}})}/> {t(en,ar)}</label>)}</div><button className='primary'>{t('Create User','إنشاء المستخدم')}</button>{adminMsg&&<p>{adminMsg}</p>}</form><div className='card' style={{marginTop:14,overflowX:'auto'}}><table><thead><tr><th>{t('Username','اسم المستخدم')}</th><th>{t('Name','الاسم')}</th><th>{t('Role','الصلاحية')}</th><th>{t('Department','الإدارة')}</th><th>{t('Status','الحالة')}</th><th>{t('Actions','الإجراءات')}</th></tr></thead><tbody>{users.map(u=><tr key={u.id}><td>{u.username}</td><td>{u.full_name}</td><td>{roleName(u.role)}</td><td>{u.department}</td><td>{u.active?t('Active','نشط'):t('Disabled','معطل')}</td><td><div className='actions'><button onClick={()=>updateUser(u.id,{active:!u.active})}>{u.active?t('Disable','تعطيل'):t('Enable','تفعيل')}</button><button onClick={()=>resetPassword(u)}>{t('Reset Password','إعادة تعيين كلمة المرور')}</button></div></td></tr>)}</tbody></table></div></>}
+
+  {page==='ai'&&<><h1>{t('Ask HSS AI','اسأل مساعد HSS الذكي')}</h1><div className='card'><p>{t('The portal AI interface is reserved here. The next deployment will connect this screen to the OpenAI server endpoint and authorized Supabase data.','واجهة الذكاء الاصطناعي للبوابة مخصصة هنا. في التحديث التالي سيتم ربط هذه الشاشة بخدمة OpenAI وبيانات Supabase المصرح بها.')}</p><p className='muted'>{t('Operational modules are already reading and writing live database records.','الوحدات التشغيلية تقرأ وتكتب حالياً سجلات قاعدة البيانات الحية.')}</p></div></>}
+
+  </div></main>
+ </div>;
 }
