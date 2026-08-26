@@ -1,0 +1,31 @@
+name: Patch agriculture navigation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/agriculture/page.tsx'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Point portal Agriculture to full checklist module
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/portal/page.tsx')
+          s=p.read_text()
+          s=s.replace("<button onClick={()=>go('agriculture')}>♣ {t('Agriculture & Landscaping','الزراعة وتنسيق الحدائق')}</button>","<button onClick={()=>window.location.assign('/agriculture')}>♣ {t('Agriculture & Landscaping','الزراعة وتنسيق الحدائق')}</button>")
+          s=s.replace("<Kpi onClick={()=>go('agriculture')} title={t('Agriculture Completed','الزراعة المكتملة')}","<Kpi onClick={()=>window.location.assign('/agriculture')} title={t('Agriculture Completed','الزراعة المكتملة')}")
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name 'hss-portal-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app/portal/page.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m 'Connect Agriculture dashboard and navigation to checklist workflow'
+          git push
