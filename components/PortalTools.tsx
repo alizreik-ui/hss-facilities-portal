@@ -34,6 +34,7 @@ export default function PortalTools(){
  if(!signed)return null;
  return <nav style={navStyle} aria-label='Portal navigation'>
   <a style={linkStyle} href='/command-center'>Command Center / مركز القيادة</a>
+  <a style={{...linkStyle,background:'#0f8b8d'}} href='/service-control'>Service Control / إدارة الخدمات</a>
   <a style={linkStyle} href='/operations'>Operations / العمليات</a>
   <a style={linkStyle} href='/field-operations'>Field Ops / العمليات الميدانية</a>
   <a style={linkStyle} href='/contracts'>Contracts / العقود</a>
