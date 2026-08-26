@@ -1,0 +1,53 @@
+name: Redesign portal dashboard
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/redesign-portal-dashboard.yml'
+permissions:
+  contents: write
+jobs:
+  redesign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add portal dashboard styles
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/globals.css')
+          s=p.read_text()
+          marker='/* PORTAL-DASHBOARD-REDESIGN-V1 */'
+          if marker in s:
+              raise SystemExit(0)
+          css=r'''
+
+/* PORTAL-DASHBOARD-REDESIGN-V1 */
+.app{display:grid;grid-template-columns:270px minmax(0,1fr);min-height:100vh;background:#f4f7fb;color:#172033}
+.app>aside{position:sticky;top:0;height:100vh;overflow-y:auto;padding:22px 16px;background:linear-gradient(180deg,#071c45 0%,#0a2d61 58%,#071a3d 100%);color:#fff;box-shadow:8px 0 28px rgba(15,23,42,.12);z-index:30}
+.app>aside .logo{font-size:26px;font-weight:900;letter-spacing:.8px;padding:5px 10px 18px;color:#fff}.app>aside .logo:after{content:' DIGITAL OPERATIONS';display:block;margin-top:3px;font-size:9px;font-weight:700;letter-spacing:1.5px;color:#93c5fd}
+.app>aside .user{margin:0 6px 18px;padding:13px;border-radius:14px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.11);display:grid;gap:3px}.app>aside .user b{font-size:14px;color:#fff}.app>aside .user small{font-size:11px;color:#bfdbfe}
+.app>aside nav{display:grid;gap:5px}.app>aside nav button,.app>aside nav a{display:flex;align-items:center;gap:9px;width:100%;min-height:43px;padding:10px 12px;border:0;border-radius:11px;background:transparent;color:#dbeafe;text-decoration:none;font-size:13px;text-align:left;transition:.18s ease}.app>aside nav button:hover,.app>aside nav a:hover{background:rgba(59,130,246,.18);color:#fff;transform:translateX(2px)}
+.app>aside nav button:first-child{background:linear-gradient(135deg,#2563eb,#6d28d9);color:#fff;box-shadow:0 7px 18px rgba(37,99,235,.25)}
+.app>aside .bottom{display:grid;gap:7px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12)}.app>aside .bottom button{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#e0ecff;border-radius:10px;padding:10px 12px;text-align:left}.app>aside .bottom button:hover{background:rgba(255,255,255,.12)}
+.app>main{min-width:0;padding:0 28px 32px;background:radial-gradient(circle at 85% 0%,rgba(59,130,246,.10),transparent 26%),linear-gradient(180deg,#f8fbff 0%,#f4f7fb 100%)}
+.app>main>header{margin:0 -28px 24px;padding:22px 30px;background:linear-gradient(115deg,#1d4ed8 0%,#312e81 58%,#5b21b6 100%);color:#fff;box-shadow:0 10px 30px rgba(30,64,175,.16);display:flex;align-items:end;justify-content:space-between;gap:18px}.app>main>header h1{margin:0;color:#fff;font-size:27px;line-height:1.15}.app>main>header span{color:#dbeafe;font-size:12px;letter-spacing:.2px}
+.app>main section{margin-bottom:18px}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:18px}.cards .kpi{position:relative;min-height:142px;padding:20px;border:0;border-radius:18px;background:#fff;box-shadow:0 10px 28px rgba(15,23,42,.075);overflow:hidden;display:flex;flex-direction:column;justify-content:center}.cards .kpi:before{content:'';position:absolute;inset:0 0 auto 0;height:5px;background:linear-gradient(90deg,#2563eb,#60a5fa)}.cards .kpi:after{content:'';position:absolute;width:100px;height:100px;border-radius:50%;right:-35px;top:-35px;background:rgba(37,99,235,.07)}.cards .kpi:nth-child(2):before{background:linear-gradient(90deg,#06b6d4,#14b8a6)}.cards .kpi:nth-child(2):after{background:rgba(6,182,212,.08)}.cards .kpi:nth-child(3):before{background:linear-gradient(90deg,#16a34a,#84cc16)}.cards .kpi:nth-child(3):after{background:rgba(22,163,74,.08)}.cards .kpi:nth-child(4):before{background:linear-gradient(90deg,#7c3aed,#a855f7)}.cards .kpi:nth-child(4):after{background:rgba(124,58,237,.08)}.cards .kpi:nth-child(5):before{background:linear-gradient(90deg,#f59e0b,#f97316)}.cards .kpi:nth-child(5):after{background:rgba(245,158,11,.09)}.cards .kpi:nth-child(6):before{background:linear-gradient(90deg,#ef4444,#f43f5e)}.cards .kpi:nth-child(6):after{background:rgba(239,68,68,.08)}.cards .kpi span{font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.45px;z-index:1}.cards .kpi strong{font-size:36px;line-height:1;margin:12px 0 8px;color:#0f172a;z-index:1}.cards .kpi small{font-size:12px;color:#64748b;z-index:1}
+.panel{background:#fff;border:1px solid #e5eaf2;border-radius:18px;padding:20px;box-shadow:0 8px 25px rgba(15,23,42,.055)}.panel h2{margin:0 0 16px;font-size:19px;color:#172033}.panel h3{color:#334155}.panel .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.panel label span{display:block;margin-bottom:6px;font-size:12px;font-weight:700;color:#64748b}.panel input,.panel select,.panel textarea{border:1px solid #dce4ee;background:#fbfdff;border-radius:11px;padding:11px 12px}.panel input:focus,.panel select:focus,.panel textarea:focus{background:#fff;border-color:#60a5fa;box-shadow:0 0 0 3px rgba(37,99,235,.10)}
+.panel table{overflow:hidden;border-radius:12px}.panel th{background:#eef4ff;color:#334155;font-size:12px}.panel td{background:#fff}.panel tbody tr:hover td{background:#f8fbff}.tablewrap{overflow:auto;border:1px solid #e8edf4;border-radius:13px}
+.actionrow{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:11px 12px;margin:8px 0;border:1px solid #e5eaf2;border-radius:11px;background:#f8fafc}
+.app .primary{background:linear-gradient(135deg,#2563eb,#4f46e5);border:0;color:#fff;border-radius:10px;padding:11px 15px}.app button:not(.primary){border-radius:9px}
+html[dir=rtl] .app>aside nav button,html[dir=rtl] .app>aside nav a,html[dir=rtl] .app>aside .bottom button{text-align:right}html[dir=rtl] .app>aside nav button:hover,html[dir=rtl] .app>aside nav a:hover{transform:translateX(-2px)}
+@media(max-width:1100px){.app{grid-template-columns:220px minmax(0,1fr)}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.app>main{padding-left:20px;padding-right:20px}.app>main>header{margin-left:-20px;margin-right:-20px}}
+@media(max-width:760px){.app{display:block}.app>aside{position:relative;height:auto;padding:12px}.app>aside .logo,.app>aside .user{display:none}.app>aside nav{display:flex;overflow-x:auto;gap:6px;padding-bottom:5px}.app>aside nav button,.app>aside nav a{width:auto;min-width:max-content;min-height:38px;padding:9px 11px;background:rgba(255,255,255,.07)}.app>aside .bottom{display:flex;margin-top:8px;padding-top:8px}.app>main{padding:0 12px 24px}.app>main>header{margin:0 -12px 16px;padding:18px 16px;display:block}.app>main>header h1{font-size:22px}.app>main>header span{display:block;margin-top:6px}.cards{grid-template-columns:1fr 1fr;gap:10px}.cards .kpi{min-height:122px;padding:15px}.cards .kpi strong{font-size:29px}.panel{padding:14px;border-radius:14px}.panel .grid{grid-template-columns:1fr}}
+@media(max-width:480px){.cards{grid-template-columns:1fr}.cards .kpi{min-height:105px}.app>aside nav button,.app>aside nav a{font-size:12px}}
+'''
+          p.write_text(s+css)
+          PY
+      - name: Commit redesign
+        run: |
+          git config user.name 'hss-portal-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app/globals.css
+          git commit -m 'Redesign portal dashboard with colorful responsive UI' || exit 0
+          git push
