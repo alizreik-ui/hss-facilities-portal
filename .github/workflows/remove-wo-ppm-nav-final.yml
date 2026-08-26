@@ -1,0 +1,31 @@
+name: Remove WO and PPM navigation final
+on:
+  push:
+    paths:
+      - '.github/workflows/remove-wo-ppm-nav-final.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove navigation and dashboard KPI cards
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/portal/page.tsx')
+          s=p.read_text()
+          s=s.replace("{manager&&<button onClick={()=>go('workorders')}>▤ {t('Work Orders','أوامر العمل')}</button>}","")
+          s=s.replace("{manager&&<button onClick={()=>go('ppm')}>↻ {t('PPM Schedules','جداول الصيانة الوقائية')}</button>}","")
+          s=s.replace("<Kpi title={t('Open Work Orders','أوامر العمل المفتوحة')} value={num(dashboard.woOpen)} sub={`${num(dashboard.woOverdue)} ${t('overdue','متأخرة')}`}/>","")
+          s=s.replace("<Kpi title={t('Active PPM','الصيانة الوقائية النشطة')} value={num(dashboard.ppmActive)} sub={t('scheduled maintenance','صيانة مجدولة')}/>","")
+          p.write_text(s)
+          PY
+      - name: Commit changes
+        run: |
+          git config user.name 'hss-portal-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app/portal/page.tsx
+          git commit -m 'Remove Work Orders and PPM from portal navigation and dashboard' || exit 0
+          git push
