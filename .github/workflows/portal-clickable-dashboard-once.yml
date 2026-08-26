@@ -1,0 +1,39 @@
+name: Portal clickable dashboard once
+on:
+  push:
+    paths:
+      - '.github/workflows/portal-clickable-dashboard-once.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Make portal dashboard fully clickable and reflect forms
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/portal/page.tsx')
+          s=p.read_text()
+          old=""" {page==='dashboard'&&<section><div className='cards'><Kpi title={t('Open Incidents','الحوادث المفتوحة')} value={num(dashboard.incidentOpen)} sub={`${num(dashboard.incidentCritical)} ${t('high / critical','عالية / حرجة')}`}/><Kpi title={t('Physical Security','الأمن المادي')} value={num(summary.physical_security_total||0)} sub={`${num(dashboard.psHigh)} ${t('high criticality','عالية الأهمية')}`}/><Kpi title={t('Agriculture Completed','الزراعة المكتملة')} value={num(dashboard.agCompleted)} sub={`${num(summary.agriculture_total||0)} ${t('total records','إجمالي السجلات')}`}/><Kpi title={t('Unread Notifications','الإشعارات غير المقروءة')} value={num(dashboard.unread)} sub={t('assigned tasks & alerts','المهام والتنبيهات المسندة')}/></div><div className='panel'><h2>{t('Recent Incidents','أحدث الحوادث')}</h2><IncidentTable rows={incidents.slice(0,8)} open={openIncident} t={t} statusLabel={statusLabel} date={date}/></div></section>}"""
+          new=""" {page==='dashboard'&&<section><div className='cards'><Kpi onClick={()=>go('incidents')} title={t('Open Incidents','الحوادث المفتوحة')} value={num(dashboard.incidentOpen)} sub={`${num(dashboard.incidentCritical)} ${t('high / critical','عالية / حرجة')}`}/><Kpi onClick={()=>go('physical')} title={t('Physical Security','الأمن المادي')} value={num(summary.physical_security_total||0)} sub={`${num(dashboard.psHigh)} ${t('high criticality','عالية الأهمية')}`}/><Kpi onClick={()=>go('agriculture')} title={t('Agriculture Completed','الزراعة المكتملة')} value={num(dashboard.agCompleted)} sub={`${num(summary.agriculture_total||0)} ${t('total records','إجمالي السجلات')}`}/><Kpi onClick={()=>window.location.assign('/field-operations')} title={t('Digital Forms','النماذج الرقمية')} value={num(summary.digital_forms_total||0)} sub={`${num(summary.digital_forms_open||0)} ${t('open / submitted','مفتوحة / مقدمة')}`}/><Kpi onClick={()=>window.location.assign('/command-center')} title={t('Unread Notifications','الإشعارات غير المقروءة')} value={num(dashboard.unread)} sub={t('assigned tasks & alerts','المهام والتنبيهات المسندة')}/></div><div className='panel'><h2 className='drillable' onClick={()=>go('incidents')}>{t('Recent Incidents','أحدث الحوادث')}</h2><IncidentTable rows={incidents.slice(0,8)} open={openIncident} t={t} statusLabel={statusLabel} date={date}/></div></section>}"""
+          if old not in s:
+              raise SystemExit('dashboard block not found')
+          s=s.replace(old,new)
+          oldk="function Kpi({title,value,sub}:{title:string,value:any,sub:string}){return <article className='kpi'><span>{title}</span><strong>{value}</strong><small>{sub}</small></article>}"
+          newk="function Kpi({title,value,sub,onClick}:{title:string,value:any,sub:string,onClick?:()=>void}){return <article className='kpi drillable' role='button' tabIndex={0} onClick={onClick} onKeyDown={e=>(e.key==='Enter'||e.key===' ')&&onClick?.()}><span>{title}</span><strong>{value}</strong><small>{sub}</small></article>}"
+          if oldk not in s:
+              raise SystemExit('Kpi component not found')
+          s=s.replace(oldk,newk)
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name 'hss-portal-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app/portal/page.tsx
+          git commit -m 'Make portal dashboard KPIs clickable and reflect all digital forms' || exit 0
+          git push
