@@ -1,8 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {createClient} from '@supabase/supabase-js';
-
-const supabase=createClient('https://sdbdppcbvlalyjnxeqmy.supabase.co','sb_publishable_YRnoxe5WTODYiA67nLfpNg_JqYHdaYM');
+import {getSessionSafely,supabase} from '@/lib/supabase-browser';
 
 type Lang='en'|'ar';
 export default function Operations(){
@@ -19,7 +17,7 @@ export default function Operations(){
  const [fu,setFu]=useState<any>({area_type:'indoor',location:'',landscape_category:'Indoor Plants',finding:'',condition:'acceptable',required_action:'',target_date:''});
  useEffect(()=>{document.documentElement.dir=lang==='ar'?'rtl':'ltr';load()},[lang]);
  async function load(){
-  const {data:{session}}=await supabase.auth.getSession(); if(!session){location.href='/portal';return}
+  const {data:{session}}=await getSessionSafely(); if(!session){location.href='/portal';return}
   const {data:p}=await supabase.from('profiles').select('*').eq('id',session.user.id).single(); setProfile(p);
   const [a,i,r,c,f,ct]=await Promise.all([
    supabase.from('assets').select('*').order('created_at',{ascending:false}).limit(200),

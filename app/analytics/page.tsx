@@ -1,8 +1,6 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
-import {createClient} from '@supabase/supabase-js';
-
-const supabase=createClient('https://sdbdppcbvlalyjnxeqmy.supabase.co','sb_publishable_YRnoxe5WTODYiA67nLfpNg_JqYHdaYM');
+import {getSessionSafely,supabase} from '@/lib/supabase-browser';
 
 function Donut({value,total,label,color}:{value:number,total:number,label:string,color:string}){
  const pct=total?Math.round(value/total*100):0;
@@ -38,7 +36,7 @@ export default function Analytics(){
  const n=(v:number)=>new Intl.NumberFormat(lang==='ar'?'ar-EG':'en-US').format(v||0);
 
  useEffect(()=>{(async()=>{
-  const {data:{session}}=await supabase.auth.getSession();
+  const {data:{session}}=await getSessionSafely();
   if(!session){window.location.href='/portal';return}
   const {data:p}=await supabase.from('profiles').select('*').eq('id',session.user.id).single(); setProfile(p);
   const [a,b,c,d,e]=await Promise.all([

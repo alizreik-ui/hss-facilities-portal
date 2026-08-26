@@ -1,7 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {createClient} from '@supabase/supabase-js';
-const supabase=createClient('https://sdbdppcbvlalyjnxeqmy.supabase.co','sb_publishable_YRnoxe5WTODYiA67nLfpNg_JqYHdaYM');
+import {supabase} from '@/lib/supabase-browser';
 export default function Login(){
   const [lang,setLang]=useState<'en'|'ar'>('en');
   const [user,setUser]=useState('');

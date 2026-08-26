@@ -1,7 +1,7 @@
 'use client';
 
 import {useEffect, useMemo, useRef, useState} from 'react';
-import {createClient} from '@supabase/supabase-js';
+import {getSessionSafely,supabase} from '@/lib/supabase-browser';
 import {
   Activity, AlertTriangle, BarChart3, CalendarDays, CheckCircle2,
   ClipboardCheck, Download, FileSpreadsheet, Filter, Mail, Paperclip,
@@ -18,11 +18,6 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
-
-const supabase = createClient(
-  'https://sdbdppcbvlalyjnxeqmy.supabase.co',
-  'sb_publishable_YRnoxe5WTODYiA67nLfpNg_JqYHdaYM'
-);
 
 type Lang = 'en' | 'ar';
 type Service = {
@@ -155,7 +150,7 @@ export default function ServiceControlPage(){
 
   async function bootstrap(){
     setLoading(true);setMessage('');
-    const {data:{session:s}}=await supabase.auth.getSession();
+    const {data:{session:s}}=await getSessionSafely();
     if(!s){location.replace('/');return}
     setSession(s);
     const [p,sv,ct,rc,ev,sc]=await Promise.all([

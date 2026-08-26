@@ -1,8 +1,6 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
-import {createClient} from '@supabase/supabase-js';
-
-const supabase=createClient('https://sdbdppcbvlalyjnxeqmy.supabase.co','sb_publishable_YRnoxe5WTODYiA67nLfpNg_JqYHdaYM');
+import {getSessionSafely,supabase} from '@/lib/supabase-browser';
 
 const defaultPerms={dashboard:true,physical_security:false,agriculture:false,health_safety:true,facilities:false,ai:true};
 const moduleOptions=[['physical_security','Physical Security','الأمن المادي'],['agriculture','Agriculture & Landscaping','الزراعة وتنسيق الحدائق'],['health_safety','Health & Safety','الصحة والسلامة'],['facilities','Facilities Management','إدارة المرافق'],['ai','Ask HSS AI','اسأل مساعد HSS الذكي']];
@@ -26,7 +24,31 @@ export default function Page(){
  const num=(v:any)=>new Intl.NumberFormat(lang==='ar'?'ar-EG':'en-US').format(Number(v||0)),date=(v:any)=>v?new Intl.DateTimeFormat(lang==='ar'?'ar-QA':'en-GB').format(new Date(v)):'-';
  const statusLabel=(s:string)=>{const m:any={open:['Open','مفتوح'],assigned:['Assigned','مسند'],in_progress:['In Progress','قيد التنفيذ'],pending_verification:['Pending Verification','بانتظار التحقق'],completed:['Completed','مكتمل'],rejected:['Rejected','مرفوض'],cancelled:['Cancelled','ملغي'],reported:['Reported','تم الإبلاغ'],under_investigation:['Under Investigation','قيد التحقيق'],pending_corrective_actions:['Corrective Actions','إجراءات تصحيحية'],closed:['Closed','مغلق'],planned:['Planned','مخطط']};return m[s]?t(m[s][0],m[s][1]):s};
  const roleName=(r:string)=>({admin:t('Admin','مدير النظام'),management:t('Management','الإدارة'),supervisor:t('Supervisor','مشرف'),staff:t('Staff','موظف'),contractor:t('Contractor','مقاول'),viewer:t('Viewer','مشاهدة فقط')} as any)[r]||r;
- useEffect(()=>{let alive=true;try{const raw=window.localStorage.getItem('sb-sdbdppcbvlalyjnxeqmy-auth-token');const cached=raw?JSON.parse(raw):null;if(cached?.access_token&&cached?.user){setSession(cached);setLoading(false);loadProfile(cached.user.id)}else setLoading(false)}catch{setLoading(false)}supabase.auth.getSession().then(({data})=>{if(!alive)return;setSession(data.session);if(data.session)loadProfile(data.session.user.id);else{setProfile(null);setSummary({})}}).catch(()=>{});const {data:{subscription}}=supabase.auth.onAuthStateChange((e,s)=>{if(!alive)return;setSession(s);setLoading(false);if(e==='SIGNED_IN'&&s)loadProfile(s.user.id);if(e==='SIGNED_OUT'){setProfile(null);setSummary({})}});return()=>{alive=false;subscription.unsubscribe()}},[]);
+ useEffect(()=>{
+  let alive=true;
+  const releaseLoading=()=>{if(alive)setLoading(false)};
+  const safetyTimer=window.setTimeout(()=>{
+   if(!alive)return;
+   setSession(null);setProfile(null);setSummary({});setLoading(false);
+   setError(t('The secure connection took too long. Please sign in again.','استغرق الاتصال الآمن وقتاً طويلاً. يرجى تسجيل الدخول مرة أخرى.'));
+  },5000);
+  getSessionSafely().then(({data})=>{
+   if(!alive)return;
+   window.clearTimeout(safetyTimer);setSession(data.session);releaseLoading();
+   if(data.session)void loadProfile(data.session.user.id);else{setProfile(null);setSummary({})}
+  }).catch(()=>{
+   if(!alive)return;
+   window.clearTimeout(safetyTimer);setSession(null);setProfile(null);setSummary({});releaseLoading();
+   setError(t('Unable to restore the secure session. Please sign in again.','تعذر استعادة الجلسة الآمنة. يرجى تسجيل الدخول مرة أخرى.'));
+  });
+  const {data:{subscription}}=supabase.auth.onAuthStateChange((e,s)=>{
+   if(!alive)return;
+   window.clearTimeout(safetyTimer);setSession(s);releaseLoading();
+   if(e==='SIGNED_IN'&&s)void loadProfile(s.user.id);
+   if(e==='SIGNED_OUT'){setProfile(null);setSummary({})}
+  });
+  return()=>{alive=false;window.clearTimeout(safetyTimer);subscription.unsubscribe()}
+ },[]);
  useEffect(()=>{document.documentElement.dir=lang==='ar'?'rtl':'ltr';document.documentElement.lang=lang},[lang]);
  async function loadProfile(id:string){const {data,error}=await supabase.rpc('hss_bootstrap');if(!error&&data?.profile){setProfile(data.profile);setSummary(data.summary||{});loadEssential();loadUsers();return}const {data:p}=await supabase.from('profiles').select('*').eq('id',id).single();setProfile(p);supabase.rpc('hss_dashboard_summary').then(({data:sum})=>setSummary(sum||{}));loadEssential();loadUsers()}
  async function loadEssential(){const [i,n]=await Promise.all([supabase.from('incidents').select('*').order('incident_date',{ascending:false}).limit(20),supabase.from('notifications').select('*').order('created_at',{ascending:false}).limit(20)]);setIncidents(i.data||[]);setNotifications(n.data||[])}

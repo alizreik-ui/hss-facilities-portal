@@ -1,8 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {createClient} from '@supabase/supabase-js';
-
-const supabase=createClient('https://sdbdppcbvlalyjnxeqmy.supabase.co','sb_publishable_YRnoxe5WTODYiA67nLfpNg_JqYHdaYM');
+import {getSessionSafely,supabase} from '@/lib/supabase-browser';
 const ar:Record<string,string>={
  'Task':'مهمة','Project':'مشروع','Corrective':'تصحيحي','Corrective Action':'إجراء تصحيحي','Inspection Finding':'ملاحظة تفتيش',
  'Low':'منخفض','Medium':'متوسط','High':'عالٍ','Critical':'حرج','Active':'نشط','Inactive':'غير نشط','Open':'مفتوح','Closed':'مغلق',
@@ -17,7 +15,7 @@ const linkStyle:any={color:'#fff',textDecoration:'none',fontSize:11,padding:'8px
 export default function PortalTools(){
  const [signed,setSigned]=useState(false);
  useEffect(()=>{
-  supabase.auth.getSession().then(({data})=>setSigned(!!data.session));
+  getSessionSafely().then(({data})=>setSigned(!!data.session)).catch(()=>setSigned(false));
   const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setSigned(!!s));
   const translate=()=>{
    const isAr=document.documentElement.lang==='ar'||document.documentElement.dir==='rtl';

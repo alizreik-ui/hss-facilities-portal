@@ -1,13 +1,11 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {createClient} from '@supabase/supabase-js';
-
-const supabase=createClient('https://sdbdppcbvlalyjnxeqmy.supabase.co','sb_publishable_YRnoxe5WTODYiA67nLfpNg_JqYHdaYM');
+import {getSessionSafely,supabase} from '@/lib/supabase-browser';
 
 export default function SystemPage(){
  const [rows,setRows]=useState<any[]>([]),[summary,setSummary]=useState<any>({}),[loading,setLoading]=useState(true),[err,setErr]=useState('');
  useEffect(()=>{(async()=>{
-  const {data:{session}}=await supabase.auth.getSession();
+  const {data:{session}}=await getSessionSafely();
   if(!session){location.href='/portal';return}
   const {data:profile}=await supabase.from('profiles').select('role').eq('id',session.user.id).single();
   if(profile?.role!=='admin'){location.href='/portal';return}

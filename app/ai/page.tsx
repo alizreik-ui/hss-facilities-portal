@@ -1,8 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {createClient} from '@supabase/supabase-js';
-
-const supabase=createClient('https://sdbdppcbvlalyjnxeqmy.supabase.co','sb_publishable_YRnoxe5WTODYiA67nLfpNg_JqYHdaYM');
+import {getSessionSafely,supabase} from '@/lib/supabase-browser';
 
 export default function AIPage(){
  const [lang,setLang]=useState<'en'|'ar'>('en');
@@ -12,7 +10,7 @@ export default function AIPage(){
  const [loading,setLoading]=useState(true);
  const [sending,setSending]=useState(false);
  const t=(en:string,ar:string)=>lang==='ar'?ar:en;
- useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);setLoading(false)})},[]);
+ useEffect(()=>{getSessionSafely().then(({data})=>{setSession(data.session);setLoading(false)}).catch(()=>setLoading(false))},[]);
  useEffect(()=>{document.documentElement.dir=lang==='ar'?'rtl':'ltr';document.documentElement.lang=lang},[lang]);
  async function send(){
   if(!q.trim()||!session||sending)return;
